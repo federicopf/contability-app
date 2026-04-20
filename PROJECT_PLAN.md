@@ -4,6 +4,8 @@
 
 Realizzare un'app di contabilita personale in Expo/React Native con dati locali su SQLite, pensata per uso mobile, in italiano e con valuta euro. La prima versione deve coprire tutte le aree richieste: conti divisi per tipologia, inserimento manuale delle transazioni, statistiche, gestione debiti/crediti e gestione abbonamenti.
 
+La UI deve essere bella, curata, coerente, comoda da usare e percepita come di alta qualita, non solo funzionale.
+
 ## Ambito della Prima Release
 
 - Dati salvati in locale su SQLite
@@ -22,6 +24,7 @@ La base attuale del progetto e minima, quindi conviene costruire prima l'infrast
 - modelli TypeScript condivisi
 - servizi o repository separati dalla UI
 - componenti riusabili per liste, card, form e stati vuoti
+- un sistema UI coerente con attenzione forte a estetica, leggibilita, ergonomia, spaziature, gerarchia visiva e facilità d'uso su mobile
 
 ## Fasi di Implementazione
 
@@ -95,6 +98,18 @@ La base attuale del progetto e minima, quindi conviene costruire prima l'infrast
 - Debiti e crediti possono essere trattati come un unico dominio con due stati diversi
 - Gli abbonamenti dovrebbero essere entita ricorrenti collegate facoltativamente alle transazioni
 - La navigazione consigliata e con tab principali per Conti, Transazioni, Statistiche e una sezione Altro contenente Debiti/Crediti e Abbonamenti
+- La UI non deve limitarsi a essere corretta: deve risultare visivamente forte, ordinata, moderna e molto comoda nell'uso quotidiano, con particolare attenzione all'esperienza mobile
+
+## Requisiti UI e UX
+
+- Interfaccia visivamente bella e memorabile, non generica
+- Esperienza d'uso comoda, fluida e chiara anche per utilizzo frequente
+- Gerarchia visiva netta per far capire subito saldi, movimenti, scadenze e azioni principali
+- Layout mobile-first con ottima leggibilita su schermi piccoli
+- Form semplici da compilare, con pochi attriti e campi ordinati in modo logico
+- Colori, tipografia, spaziature e componenti devono essere coerenti in tutta l'app
+- Dashboard e schermate statistiche devono essere sia eleganti sia immediate da leggere
+- Stati vuoti, errori, conferme e feedback devono essere curati quanto le schermate principali
 
 ## Ordine di Sviluppo Consigliato
 
