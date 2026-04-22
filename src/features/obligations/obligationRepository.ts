@@ -88,3 +88,21 @@ export function deleteObligation(database: SQLite.SQLiteDatabase, input: { oblig
     database.runSync('DELETE FROM obligations WHERE id = ?', [input.obligationId]);
   });
 }
+
+export function updateObligation(
+  database: SQLite.SQLiteDatabase,
+  input: { obligationId: string; type: ObligationType; counterparty: string; amount: number; dueAt: string },
+) {
+  const existing = database.getFirstSync<{ paid_amount: number }>('SELECT paid_amount FROM obligations WHERE id = ?', [
+    input.obligationId,
+  ]);
+
+  const paidAmount = existing?.paid_amount ?? 0;
+  const nextPaidAmount = Math.min(paidAmount, input.amount);
+  const nextStatus = nextPaidAmount >= input.amount ? 'closed' : nextPaidAmount > 0 ? 'partial' : 'open';
+
+  database.runSync(
+    'UPDATE obligations SET type = ?, counterparty = ?, amount = ?, due_at = ?, paid_amount = ?, status = ? WHERE id = ?',
+    [input.type, input.counterparty.trim(), input.amount, input.dueAt, nextPaidAmount, nextStatus, input.obligationId],
+  );
+}

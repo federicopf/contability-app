@@ -9,13 +9,19 @@ import { SectionCard } from '../components/SectionCard';
 import { TextField } from '../components/TextField';
 import { useDatabase } from '../db/DatabaseProvider';
 import { useAccounts } from '../features/accounts/useAccounts';
-import { createObligation, deleteObligation, registerObligationPayment } from '../features/obligations/obligationRepository';
+import {
+  createObligation,
+  deleteObligation,
+  registerObligationPayment,
+  updateObligation,
+} from '../features/obligations/obligationRepository';
 import { useObligations } from '../features/obligations/useObligations';
 import {
   createSubscription,
   deleteSubscription,
   renewSubscription,
   toggleSubscriptionActive,
+  updateSubscription,
 } from '../features/subscriptions/subscriptionRepository';
 import { useSubscriptions } from '../features/subscriptions/useSubscriptions';
 import { colors, radius, spacing, typography } from '../theme/tokens';
@@ -56,6 +62,8 @@ export function MoreScreen() {
   const [nextBillingDate, setNextBillingDate] = useState(todayIsoDate());
   const [subscriptionAccountId, setSubscriptionAccountId] = useState(accounts[0]?.id ?? '');
   const [feedback, setFeedback] = useState('');
+  const [editingObligationId, setEditingObligationId] = useState<string | null>(null);
+  const [editingSubscriptionId, setEditingSubscriptionId] = useState<string | null>(null);
 
   const accountOptions = useMemo(
     () => accounts.map((account) => ({ label: account.name, value: account.id })),
@@ -77,17 +85,28 @@ export function MoreScreen() {
       return;
     }
 
-    createObligation(database, {
-      type: obligationType,
-      counterparty,
-      amount: parsedAmount,
-      dueAt: obligationDueAt,
-    });
+    if (editingObligationId) {
+      updateObligation(database, {
+        obligationId: editingObligationId,
+        type: obligationType,
+        counterparty,
+        amount: parsedAmount,
+        dueAt: obligationDueAt,
+      });
+    } else {
+      createObligation(database, {
+        type: obligationType,
+        counterparty,
+        amount: parsedAmount,
+        dueAt: obligationDueAt,
+      });
+    }
 
     setCounterparty('');
     setObligationAmount('0');
     setObligationDueAt(todayIsoDate());
-    setFeedback('Debito o credito salvato correttamente.');
+    setEditingObligationId(null);
+    setFeedback(editingObligationId ? 'Debito o credito aggiornato correttamente.' : 'Debito o credito salvato correttamente.');
     refreshData();
   };
 
@@ -123,19 +142,31 @@ export function MoreScreen() {
       return;
     }
 
-    createSubscription(database, {
-      name: subscriptionName,
-      amount: parsedAmount,
-      frequency: subscriptionFrequency,
-      nextBillingDate,
-      accountId: subscriptionAccountId || undefined,
-    });
+    if (editingSubscriptionId) {
+      updateSubscription(database, {
+        subscriptionId: editingSubscriptionId,
+        name: subscriptionName,
+        amount: parsedAmount,
+        frequency: subscriptionFrequency,
+        nextBillingDate,
+        accountId: subscriptionAccountId || undefined,
+      });
+    } else {
+      createSubscription(database, {
+        name: subscriptionName,
+        amount: parsedAmount,
+        frequency: subscriptionFrequency,
+        nextBillingDate,
+        accountId: subscriptionAccountId || undefined,
+      });
+    }
 
     setSubscriptionName('');
     setSubscriptionAmount('0');
     setSubscriptionFrequency('monthly');
     setNextBillingDate(todayIsoDate());
-    setFeedback('Abbonamento registrato correttamente.');
+    setEditingSubscriptionId(null);
+    setFeedback(editingSubscriptionId ? 'Abbonamento aggiornato correttamente.' : 'Abbonamento registrato correttamente.');
     refreshData();
   };
 
@@ -147,6 +178,9 @@ export function MoreScreen() {
 
   const handleDeleteObligation = (obligationId: string) => {
     deleteObligation(database, { obligationId });
+    if (editingObligationId === obligationId) {
+      clearObligationForm();
+    }
     setFeedback('Debito o credito eliminato.');
     refreshData();
   };
@@ -159,8 +193,61 @@ export function MoreScreen() {
 
   const handleDeleteSubscription = (subscriptionId: string) => {
     deleteSubscription(database, { subscriptionId });
+    if (editingSubscriptionId === subscriptionId) {
+      clearSubscriptionForm();
+    }
     setFeedback('Abbonamento eliminato.');
     refreshData();
+  };
+
+  const startEditingObligation = (obligationId: string) => {
+    const obligation = obligations.find((item) => item.id === obligationId);
+
+    if (!obligation) {
+      return;
+    }
+
+    setEditingObligationId(obligation.id);
+    setObligationType(obligation.type);
+    setCounterparty(obligation.counterparty);
+    setObligationAmount(String(obligation.amount));
+    setObligationDueAt(obligation.dueAt);
+    setFeedback('Modifica il debito o credito e salva per aggiornare i dati.');
+  };
+
+  const clearObligationForm = () => {
+    setEditingObligationId(null);
+    setObligationType('debt');
+    setCounterparty('');
+    setObligationAmount('0');
+    setObligationDueAt(todayIsoDate());
+    setFeedback('');
+  };
+
+  const startEditingSubscription = (subscriptionId: string) => {
+    const subscription = subscriptions.find((item) => item.id === subscriptionId);
+
+    if (!subscription) {
+      return;
+    }
+
+    setEditingSubscriptionId(subscription.id);
+    setSubscriptionName(subscription.name);
+    setSubscriptionAmount(String(subscription.amount));
+    setSubscriptionFrequency(subscription.frequency);
+    setNextBillingDate(subscription.nextBillingDate);
+    setSubscriptionAccountId(subscription.accountId ?? '');
+    setFeedback('Modifica l\'abbonamento e salva per aggiornare i dati.');
+  };
+
+  const clearSubscriptionForm = () => {
+    setEditingSubscriptionId(null);
+    setSubscriptionName('');
+    setSubscriptionAmount('0');
+    setSubscriptionFrequency('monthly');
+    setNextBillingDate(todayIsoDate());
+    setSubscriptionAccountId(accounts[0]?.id ?? '');
+    setFeedback('');
   };
 
   return (
@@ -177,14 +264,18 @@ export function MoreScreen() {
       }
     >
       <SectionCard
-        title="Nuovo debito o credito"
+        title={editingObligationId ? 'Modifica debito o credito' : 'Nuovo debito o credito'}
         description="Registra somme da pagare o da ricevere, con data di scadenza e stato aggiornabile tramite pagamenti parziali."
       >
         <ChoiceChips label="Tipo" onSelect={setObligationType} options={obligationTypeOptions} selectedValue={obligationType} />
         <TextField label="Controparte" onChangeText={setCounterparty} placeholder="Es. Marco Rossi" value={counterparty} />
         <TextField label="Importo" keyboardType="numeric" onChangeText={setObligationAmount} placeholder="0,00" value={obligationAmount} />
         <TextField label="Scadenza" onChangeText={setObligationDueAt} placeholder="YYYY-MM-DD" value={obligationDueAt} />
-        <PrimaryButton label="Salva debito o credito" onPress={saveObligation} />
+        <PrimaryButton
+          label={editingObligationId ? 'Aggiorna debito o credito' : 'Salva debito o credito'}
+          onPress={saveObligation}
+        />
+        {editingObligationId ? <PrimaryButton label="Annulla modifica" onPress={clearObligationForm} tone="secondary" /> : null}
       </SectionCard>
 
       <SectionCard
@@ -212,6 +303,9 @@ export function MoreScreen() {
               </View>
               <Text style={styles.moduleSubtle}>Totale {formatCurrency(item.amount)} · Incassato/pagato {formatCurrency(item.paidAmount)}</Text>
               <View style={styles.rowActions}>
+                <Pressable onPress={() => startEditingObligation(item.id)} style={styles.inlineAction}>
+                  <Text style={styles.inlineActionLabel}>Modifica</Text>
+                </Pressable>
                 {item.status !== 'closed' ? (
                   <PrimaryButton label="Registra parziale" onPress={() => addPayment(item.id)} tone="secondary" />
                 ) : null}
@@ -227,7 +321,7 @@ export function MoreScreen() {
       </SectionCard>
 
       <SectionCard
-        title="Nuovo abbonamento"
+        title={editingSubscriptionId ? 'Modifica abbonamento' : 'Nuovo abbonamento'}
         description="Registra la ricorrenza e, se vuoi, associa un conto: al rinnovo verra creato anche il movimento di spesa."
       >
         <TextField label="Nome" onChangeText={setSubscriptionName} placeholder="Es. Netflix" value={subscriptionName} />
@@ -247,7 +341,8 @@ export function MoreScreen() {
             selectedValue={subscriptionAccountId}
           />
         ) : null}
-        <PrimaryButton label="Salva abbonamento" onPress={saveSubscription} />
+        <PrimaryButton label={editingSubscriptionId ? 'Aggiorna abbonamento' : 'Salva abbonamento'} onPress={saveSubscription} />
+        {editingSubscriptionId ? <PrimaryButton label="Annulla modifica" onPress={clearSubscriptionForm} tone="secondary" /> : null}
       </SectionCard>
 
       <SectionCard
@@ -268,6 +363,9 @@ export function MoreScreen() {
               </View>
               <Text style={styles.moduleSubtle}>Conto associato: {item.accountName ?? 'Nessuno'}</Text>
               <View style={styles.rowActions}>
+                <Pressable onPress={() => startEditingSubscription(item.id)} style={styles.inlineAction}>
+                  <Text style={styles.inlineActionLabel}>Modifica</Text>
+                </Pressable>
                 {item.active ? <PrimaryButton label="Segna rinnovo" onPress={() => handleRenewSubscription(item.id)} tone="secondary" /> : null}
                 <Pressable onPress={() => handleToggleSubscription(item.id, item.active)} style={styles.inlineAction}>
                   <Text style={styles.inlineActionLabel}>{item.active ? 'Pausa' : 'Riattiva'}</Text>

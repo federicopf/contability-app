@@ -113,6 +113,30 @@ export function deleteSubscription(database: SQLite.SQLiteDatabase, input: { sub
   database.runSync('DELETE FROM subscriptions WHERE id = ?', [input.subscriptionId]);
 }
 
+export function updateSubscription(
+  database: SQLite.SQLiteDatabase,
+  input: {
+    subscriptionId: string;
+    name: string;
+    amount: number;
+    frequency: SubscriptionFrequency;
+    nextBillingDate: string;
+    accountId?: string;
+  },
+) {
+  database.runSync(
+    'UPDATE subscriptions SET name = ?, amount = ?, frequency = ?, next_billing_date = ?, account_id = ? WHERE id = ?',
+    [
+      input.name.trim(),
+      input.amount,
+      input.frequency,
+      input.nextBillingDate,
+      input.accountId ?? null,
+      input.subscriptionId,
+    ],
+  );
+}
+
 function advanceDate(currentDate: Date, frequency: SubscriptionFrequency) {
   const nextDate = new Date(currentDate);
 

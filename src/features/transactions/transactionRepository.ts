@@ -6,6 +6,7 @@ import { generateId } from '../../utils/id';
 export type TransactionListItem = {
   id: string;
   accountId: string;
+  relatedAccountId: string | null;
   type: TransactionType;
   amount: number;
   category: string;
@@ -19,6 +20,7 @@ export type TransactionListItem = {
 type TransactionRow = {
   id: string;
   account_id: string;
+  related_account_id: string | null;
   type: TransactionType;
   amount: number;
   category: string;
@@ -34,6 +36,7 @@ export function listTransactions(database: SQLite.SQLiteDatabase): TransactionLi
     SELECT
       t.id,
       t.account_id,
+      t.related_account_id,
       t.type,
       t.amount,
       t.category,
@@ -51,6 +54,7 @@ export function listTransactions(database: SQLite.SQLiteDatabase): TransactionLi
   return rows.map((row) => ({
     id: row.id,
     accountId: row.account_id,
+    relatedAccountId: row.related_account_id,
     type: row.type,
     amount: row.amount,
     category: row.category,
@@ -151,6 +155,8 @@ export function updateTransaction(
   input: {
     id: string;
     transferGroupId?: string | null;
+    originalAccountId?: string;
+    originalRelatedAccountId?: string | null;
     type: TransactionType;
     amount: number;
     category: string;
@@ -170,6 +176,8 @@ export function updateTransaction(
 
     const destinationAccountId = input.relatedAccountId;
     const transferGroupId = input.transferGroupId;
+    const originalAccountId = input.originalAccountId ?? input.accountId;
+    const originalRelatedAccountId = input.originalRelatedAccountId ?? destinationAccountId;
 
     database.withTransactionSync(() => {
       database.runSync(
@@ -185,7 +193,7 @@ export function updateTransaction(
           input.bookedAt,
           destinationAccountId,
           transferGroupId,
-          input.accountId,
+          originalAccountId,
         ],
       );
       database.runSync(
@@ -201,7 +209,7 @@ export function updateTransaction(
           input.bookedAt,
           input.accountId,
           transferGroupId,
-          destinationAccountId,
+          originalRelatedAccountId,
         ],
       );
     });
