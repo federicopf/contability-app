@@ -33,6 +33,11 @@
       "expo-dev-client",
       "expo-font",
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "498558ad-59dd-420e-8664-a2699013b071"
+      }
+    }
   }
 }
