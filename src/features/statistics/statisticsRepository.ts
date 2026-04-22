@@ -17,6 +17,8 @@ export type AccountBreakdownItem = {
   balance: number;
 };
 
+export type StatisticsPeriodKey = 'currentMonth' | 'previousMonth' | 'currentYear';
+
 type SummaryRow = {
   income: number | null;
   expense: number | null;
@@ -42,7 +44,11 @@ export function getStatisticsSnapshot(database: SQLite.SQLiteDatabase) {
     currentMonth: readSummary(database, currentMonthRange.start, currentMonthRange.end),
     previousMonth: readSummary(database, previousMonthRange.start, previousMonthRange.end),
     currentYear: readSummary(database, currentYearRange.start, currentYearRange.end),
-    topExpenseCategories: readTopExpenseCategories(database, currentMonthRange.start, currentMonthRange.end),
+    topExpenseCategories: {
+      currentMonth: readTopExpenseCategories(database, currentMonthRange.start, currentMonthRange.end),
+      previousMonth: readTopExpenseCategories(database, previousMonthRange.start, previousMonthRange.end),
+      currentYear: readTopExpenseCategories(database, currentYearRange.start, currentYearRange.end),
+    },
     accountBalances: readAccountBalances(database),
   };
 }

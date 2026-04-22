@@ -6,13 +6,14 @@ import {
   type AccountBreakdownItem,
   type CategoryBreakdownItem,
   type PeriodSnapshot,
+  type StatisticsPeriodKey,
 } from './statisticsRepository';
 
 type StatisticsSnapshot = {
   currentMonth: PeriodSnapshot;
   previousMonth: PeriodSnapshot;
   currentYear: PeriodSnapshot;
-  topExpenseCategories: CategoryBreakdownItem[];
+  topExpenseCategories: Record<StatisticsPeriodKey, CategoryBreakdownItem[]>;
   accountBalances: AccountBreakdownItem[];
 };
 
@@ -20,7 +21,11 @@ const emptySnapshot: StatisticsSnapshot = {
   currentMonth: { income: 0, expense: 0, net: 0, transactionsCount: 0 },
   previousMonth: { income: 0, expense: 0, net: 0, transactionsCount: 0 },
   currentYear: { income: 0, expense: 0, net: 0, transactionsCount: 0 },
-  topExpenseCategories: [],
+  topExpenseCategories: {
+    currentMonth: [],
+    previousMonth: [],
+    currentYear: [],
+  },
   accountBalances: [],
 };
 

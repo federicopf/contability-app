@@ -1,18 +1,34 @@
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen } from '../components/AppScreen';
+import { ChoiceChips } from '../components/ChoiceChips';
 import { InfoCard } from '../components/InfoCard';
 import { SectionCard } from '../components/SectionCard';
 import { useStatistics } from '../features/statistics/useStatistics';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import { formatCurrency } from '../utils/format';
 
+const periodOptions = [
+  { label: 'Mese attuale', value: 'currentMonth' },
+  { label: 'Mese precedente', value: 'previousMonth' },
+  { label: 'Anno', value: 'currentYear' },
+] as const;
+
 export function StatisticsScreen() {
   const { currentMonth, previousMonth, currentYear, topExpenseCategories, accountBalances } = useStatistics();
-  const highestCategoryValue = topExpenseCategories[0]?.total ?? 0;
+  const [activePeriod, setActivePeriod] = useState<(typeof periodOptions)[number]['value']>('currentMonth');
+  const snapshots = useMemo(
+    () => ({ currentMonth, previousMonth, currentYear }),
+    [currentMonth, currentYear, previousMonth],
+  );
+  const activeSnapshot = snapshots[activePeriod];
+  const activeCategories = topExpenseCategories[activePeriod];
+  const highestCategoryValue = activeCategories[0]?.total ?? 0;
   const highestAccountBalance = accountBalances[0]?.balance ?? 0;
   const trendDelta = currentMonth.net - previousMonth.net;
   const trendLabel = trendDelta >= 0 ? 'In crescita' : 'In flessione';
+  const periodLabel = activePeriod === 'currentMonth' ? 'Mese corrente' : activePeriod === 'previousMonth' ? 'Mese precedente' : 'Anno corrente';
 
   return (
     <AppScreen
@@ -21,18 +37,30 @@ export function StatisticsScreen() {
       description="La dashboard ora legge direttamente il database locale e riassume entrate, uscite, netto e distribuzione dei saldi senza passaggi manuali."
       hero={
         <InfoCard
-          title="Mese corrente"
-          subtitle={`${currentMonth.transactionsCount} movimenti registrati · ${trendLabel}`}
-          value={formatCurrency(currentMonth.net)}
+          title={periodLabel}
+          subtitle={`${activeSnapshot.transactionsCount} movimenti registrati · ${activePeriod === 'currentMonth' ? trendLabel : 'Vista attiva'}`}
+          value={formatCurrency(activeSnapshot.net)}
           tone="strong"
         />
       }
     >
+      <SectionCard
+        title="Periodo attivo"
+        description="Sposta il focus della dashboard senza cambiare schermata: il riepilogo e le categorie seguono il periodo selezionato."
+      >
+        <ChoiceChips
+          label="Seleziona periodo"
+          onSelect={setActivePeriod}
+          options={periodOptions as unknown as Array<{ label: string; value: (typeof periodOptions)[number]['value'] }>}
+          selectedValue={activePeriod}
+        />
+      </SectionCard>
+
       <View style={styles.statsGrid}>
         {[
-          { title: 'Entrate mese', value: formatCurrency(currentMonth.income) },
-          { title: 'Uscite mese', value: formatCurrency(currentMonth.expense) },
-          { title: 'Netto anno', value: formatCurrency(currentYear.net) },
+          { title: `Entrate ${periodLabel.toLowerCase()}`, value: formatCurrency(activeSnapshot.income) },
+          { title: `Uscite ${periodLabel.toLowerCase()}`, value: formatCurrency(activeSnapshot.expense) },
+          { title: `Netto ${periodLabel.toLowerCase()}`, value: formatCurrency(activeSnapshot.net) },
         ].map((item) => (
           <View key={item.title} style={styles.statTile}>
             <Text style={styles.statTitle}>{item.title}</Text>
@@ -65,10 +93,10 @@ export function StatisticsScreen() {
 
       <SectionCard
         title="Categorie di spesa top"
-        description="Le cinque categorie che stanno assorbendo piu spesa nel mese corrente."
+        description={`Le cinque categorie che stanno assorbendo piu spesa nel periodo selezionato: ${periodLabel.toLowerCase()}.`}
       >
-        {topExpenseCategories.length > 0 ? (
-          topExpenseCategories.map((item) => (
+        {activeCategories.length > 0 ? (
+          activeCategories.map((item) => (
             <View key={item.category} style={styles.chartItem}>
               <View style={styles.comparisonRow}>
                 <Text style={styles.comparisonLabel}>{item.category}</Text>
