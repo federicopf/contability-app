@@ -13,7 +13,7 @@ import { createTransaction, deleteTransaction, updateTransaction } from '../feat
 import { useTransactions } from '../features/transactions/useTransactions';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import type { TransactionType } from '../types/domain';
-import { todayIsoDate } from '../utils/date';
+import { isoDateDaysAgo, startOfCurrentMonthIsoDate, todayIsoDate } from '../utils/date';
 import { formatCurrency, formatDate, formatTransactionType } from '../utils/format';
 
 const transactionTypeOptions: Array<{ label: string; value: TransactionType }> = [
@@ -27,6 +27,13 @@ const transactionFilterOptions = [
   { label: 'Entrate', value: 'income' },
   { label: 'Uscite', value: 'expense' },
   { label: 'Trasferimenti', value: 'transfer' },
+] as const;
+
+const dateFilterOptions = [
+  { label: 'Tutto', value: 'all' },
+  { label: '7 giorni', value: 'last7' },
+  { label: '30 giorni', value: 'last30' },
+  { label: 'Mese', value: 'month' },
 ] as const;
 
 export function TransactionsScreen() {
@@ -45,6 +52,8 @@ export function TransactionsScreen() {
   const [editingTransferGroupId, setEditingTransferGroupId] = useState<string | null>(null);
   const [activeTypeFilter, setActiveTypeFilter] = useState<(typeof transactionFilterOptions)[number]['value']>('all');
   const [activeAccountFilter, setActiveAccountFilter] = useState('all');
+  const [activeDateFilter, setActiveDateFilter] = useState<(typeof dateFilterOptions)[number]['value']>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const accountOptions = useMemo(
     () => accounts.map((account) => ({ label: account.name, value: account.id })),
@@ -66,10 +75,19 @@ export function TransactionsScreen() {
       transactions.filter((transaction) => {
         const matchesType = activeTypeFilter === 'all' || transaction.type === activeTypeFilter;
         const matchesAccount = activeAccountFilter === 'all' || transaction.accountId === activeAccountFilter;
+        const matchesDate = matchesDateFilter(transaction.bookedAt, activeDateFilter);
+        const normalizedQuery = searchQuery.trim().toLowerCase();
+        const haystack = `${transaction.description} ${transaction.category} ${transaction.accountName} ${transaction.relatedAccountName ?? ''}`.toLowerCase();
+        const matchesSearch = !normalizedQuery || haystack.includes(normalizedQuery);
 
-        return matchesType && matchesAccount;
+        return matchesType && matchesAccount && matchesDate && matchesSearch;
       }),
-    [activeAccountFilter, activeTypeFilter, transactions],
+    [activeAccountFilter, activeDateFilter, activeTypeFilter, searchQuery, transactions],
+  );
+
+  const filteredAmountTotal = useMemo(
+    () => filteredTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    [filteredTransactions],
   );
 
   const saveTransaction = () => {
@@ -185,7 +203,7 @@ export function TransactionsScreen() {
       hero={
         <InfoCard
           title="Attivita registrata"
-          subtitle="Movimenti presenti nel database locale"
+          subtitle="Movimenti presenti nel database locale dopo i filtri attivi"
           value={`${filteredTransactions.length} movimenti`}
         />
       }
@@ -219,6 +237,7 @@ export function TransactionsScreen() {
         title="Filtra il ledger"
         description="Riduci il rumore visivo e lavora sui movimenti giusti senza perdere contesto."
       >
+        <TextField label="Cerca" onChangeText={setSearchQuery} placeholder="Descrizione, categoria o conto" value={searchQuery} />
         <ChoiceChips
           label="Tipo"
           onSelect={setActiveTypeFilter}
@@ -226,31 +245,61 @@ export function TransactionsScreen() {
           selectedValue={activeTypeFilter}
         />
         <ChoiceChips label="Conto" onSelect={setActiveAccountFilter} options={filterAccountOptions} selectedValue={activeAccountFilter} />
+        <ChoiceChips
+          label="Periodo"
+          onSelect={setActiveDateFilter}
+          options={dateFilterOptions as unknown as Array<{ label: string; value: (typeof dateFilterOptions)[number]['value'] }>}
+          selectedValue={activeDateFilter}
+        />
+        <View style={styles.filterSummary}>
+          <Text style={styles.filterSummaryLabel}>Totale importi visibili</Text>
+          <Text style={styles.filterSummaryValue}>{formatCurrency(filteredAmountTotal)}</Text>
+        </View>
       </SectionCard>
 
-      {filteredTransactions.map((transaction) => (
-        <View key={transaction.id} style={styles.transactionRow}>
-          <View style={styles.transactionText}>
-            <Text style={styles.transactionTitle}>{transaction.description}</Text>
-            <Text style={styles.transactionMeta}>
-              {formatTransactionType(transaction.transferGroupId ? 'transfer' : transaction.type)} · {transaction.accountName}
-              {transaction.relatedAccountName ? ` -> ${transaction.relatedAccountName}` : ''} · {formatDate(transaction.bookedAt)}
-            </Text>
+      {filteredTransactions.length > 0 ? (
+        filteredTransactions.map((transaction) => (
+          <View key={transaction.id} style={styles.transactionRow}>
+            <View style={styles.transactionText}>
+              <Text style={styles.transactionTitle}>{transaction.description}</Text>
+              <Text style={styles.transactionMeta}>
+                {formatTransactionType(transaction.transferGroupId ? 'transfer' : transaction.type)} · {transaction.accountName}
+                {transaction.relatedAccountName ? ` -> ${transaction.relatedAccountName}` : ''} · {formatDate(transaction.bookedAt)}
+              </Text>
+            </View>
+            <View style={styles.transactionAside}>
+              <Text style={styles.transactionAmount}>{formatCurrency(transaction.amount)}</Text>
+              <Text style={styles.transactionCategory}>{transaction.category}</Text>
+              <Pressable onPress={() => startEditingTransaction(transaction.id)} style={styles.editChip}>
+                <Text style={styles.editChipLabel}>Modifica</Text>
+              </Pressable>
+              <Pressable onPress={() => removeTransaction(transaction.id, transaction.transferGroupId)} style={styles.deleteChip}>
+                <Text style={styles.deleteChipLabel}>{transaction.transferGroupId ? 'Elimina gruppo' : 'Elimina'}</Text>
+              </Pressable>
+            </View>
           </View>
-          <View style={styles.transactionAside}>
-            <Text style={styles.transactionAmount}>{formatCurrency(transaction.amount)}</Text>
-            <Text style={styles.transactionCategory}>{transaction.category}</Text>
-            <Pressable onPress={() => startEditingTransaction(transaction.id)} style={styles.editChip}>
-              <Text style={styles.editChipLabel}>Modifica</Text>
-            </Pressable>
-            <Pressable onPress={() => removeTransaction(transaction.id, transaction.transferGroupId)} style={styles.deleteChip}>
-              <Text style={styles.deleteChipLabel}>{transaction.transferGroupId ? 'Elimina gruppo' : 'Elimina'}</Text>
-            </Pressable>
-          </View>
+        ))
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateTitle}>Nessun movimento nei filtri attivi</Text>
+          <Text style={styles.emptyStateBody}>Prova a cambiare periodo, conto o ricerca per ritrovare i movimenti salvati.</Text>
         </View>
-      ))}
+      )}
     </AppScreen>
   );
+}
+
+function matchesDateFilter(bookedAt: string, filter: (typeof dateFilterOptions)[number]['value']) {
+  switch (filter) {
+    case 'last7':
+      return bookedAt >= isoDateDaysAgo(7);
+    case 'last30':
+      return bookedAt >= isoDateDaysAgo(30);
+    case 'month':
+      return bookedAt >= startOfCurrentMonthIsoDate();
+    default:
+      return true;
+  }
 }
 
 const styles = StyleSheet.create({
@@ -325,5 +374,40 @@ const styles = StyleSheet.create({
     fontFamily: typography.bodyStrong,
     fontSize: 12,
     color: colors.textPrimary,
+  },
+  filterSummary: {
+    backgroundColor: colors.panelMuted,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: 4,
+  },
+  filterSummaryLabel: {
+    fontFamily: typography.body,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  filterSummaryValue: {
+    fontFamily: typography.title,
+    fontSize: 22,
+    color: colors.textPrimary,
+  },
+  emptyState: {
+    backgroundColor: colors.panel,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: 8,
+  },
+  emptyStateTitle: {
+    fontFamily: typography.title,
+    fontSize: 18,
+    color: colors.textPrimary,
+  },
+  emptyStateBody: {
+    fontFamily: typography.body,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textSecondary,
   },
 });
