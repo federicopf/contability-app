@@ -1,0 +1,192 @@
+import { useMemo, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { AppScreen } from '../components/AppScreen';
+import { ChoiceChips } from '../components/ChoiceChips';
+import { InfoCard } from '../components/InfoCard';
+import { PrimaryButton } from '../components/PrimaryButton';
+import { SectionCard } from '../components/SectionCard';
+import { TextField } from '../components/TextField';
+import { useDatabase } from '../db/DatabaseProvider';
+import { useAccounts } from '../features/accounts/useAccounts';
+import { createTransaction } from '../features/transactions/transactionRepository';
+import { useTransactions } from '../features/transactions/useTransactions';
+import { colors, radius, spacing, typography } from '../theme/tokens';
+import type { TransactionType } from '../types/domain';
+import { todayIsoDate } from '../utils/date';
+import { formatCurrency, formatDate, formatTransactionType } from '../utils/format';
+
+const transactionTypeOptions: Array<{ label: string; value: TransactionType }> = [
+  { label: 'Entrata', value: 'income' },
+  { label: 'Uscita', value: 'expense' },
+  { label: 'Trasferimento', value: 'transfer' },
+];
+
+export function TransactionsScreen() {
+  const { database, refreshData } = useDatabase();
+  const { accounts } = useAccounts();
+  const { transactions } = useTransactions();
+  const [type, setType] = useState<TransactionType>('expense');
+  const [amount, setAmount] = useState('0');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [bookedAt, setBookedAt] = useState(todayIsoDate());
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
+  const [relatedAccountId, setRelatedAccountId] = useState('');
+  const [feedback, setFeedback] = useState('');
+
+  const accountOptions = useMemo(
+    () => accounts.map((account) => ({ label: account.name, value: account.id })),
+    [accounts],
+  );
+
+  const targetAccountOptions = useMemo(
+    () => accountOptions.filter((option) => option.value !== accountId),
+    [accountId, accountOptions],
+  );
+
+  const saveTransaction = () => {
+    const parsedAmount = Number.parseFloat(amount.replace(',', '.'));
+
+    if (!accountId) {
+      setFeedback('Crea o seleziona prima un conto.');
+      return;
+    }
+
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setFeedback('L\'importo deve essere maggiore di zero.');
+      return;
+    }
+
+    if (!description.trim()) {
+      setFeedback('Inserisci una descrizione del movimento.');
+      return;
+    }
+
+    if (type === 'transfer' && !relatedAccountId) {
+      setFeedback('Per un trasferimento serve anche il conto di destinazione.');
+      return;
+    }
+
+    createTransaction(database, {
+      type,
+      amount: parsedAmount,
+      category,
+      description,
+      bookedAt,
+      accountId,
+      relatedAccountId: type === 'transfer' ? relatedAccountId : undefined,
+    });
+
+    setAmount('0');
+    setDescription('');
+    setCategory('');
+    setBookedAt(todayIsoDate());
+    setRelatedAccountId('');
+    setFeedback('Movimento registrato correttamente.');
+    refreshData();
+  };
+
+  return (
+    <AppScreen
+      eyebrow="Movimenti"
+      title="Inserimento manuale senza attriti"
+      description="La base operativa e pronta: puoi registrare movimenti manuali e trasferimenti tra conti con effetto immediato sui saldi."
+      hero={
+        <InfoCard
+          title="Attivita registrata"
+          subtitle="Movimenti presenti nel database locale"
+          value={`${transactions.length} movimenti`}
+        />
+      }
+    >
+      <SectionCard
+        title="Nuovo movimento"
+        description="Usa il form per inserire entrate, uscite o trasferimenti. I trasferimenti generano due registrazioni coerenti tra conto origine e destinazione."
+      >
+        <ChoiceChips label="Tipo movimento" onSelect={setType} options={transactionTypeOptions} selectedValue={type} />
+        <TextField label="Descrizione" onChangeText={setDescription} placeholder="Es. Spesa supermercato" value={description} />
+        <TextField label="Categoria" onChangeText={setCategory} placeholder="Es. Alimentari" value={category} />
+        <TextField label="Importo" keyboardType="numeric" onChangeText={setAmount} placeholder="0,00" value={amount} />
+        <TextField label="Data" onChangeText={setBookedAt} placeholder="YYYY-MM-DD" value={bookedAt} />
+        {accountOptions.length > 0 ? (
+          <ChoiceChips label="Conto" onSelect={setAccountId} options={accountOptions} selectedValue={accountId} />
+        ) : null}
+        {type === 'transfer' && targetAccountOptions.length > 0 ? (
+          <ChoiceChips
+            label="Conto destinazione"
+            onSelect={setRelatedAccountId}
+            options={targetAccountOptions}
+            selectedValue={relatedAccountId}
+          />
+        ) : null}
+        <PrimaryButton label="Salva movimento" onPress={saveTransaction} />
+        {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
+      </SectionCard>
+
+      {transactions.map((transaction) => (
+        <View key={transaction.id} style={styles.transactionRow}>
+          <View style={styles.transactionText}>
+            <Text style={styles.transactionTitle}>{transaction.description}</Text>
+            <Text style={styles.transactionMeta}>
+              {formatTransactionType(transaction.type)} · {transaction.accountName}
+              {transaction.relatedAccountName ? ` -> ${transaction.relatedAccountName}` : ''} · {formatDate(transaction.bookedAt)}
+            </Text>
+          </View>
+          <View style={styles.transactionAside}>
+            <Text style={styles.transactionAmount}>{formatCurrency(transaction.amount)}</Text>
+            <Text style={styles.transactionCategory}>{transaction.category}</Text>
+          </View>
+        </View>
+      ))}
+    </AppScreen>
+  );
+}
+
+const styles = StyleSheet.create({
+  transactionRow: {
+    backgroundColor: colors.panel,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  transactionText: {
+    flex: 1,
+    gap: 4,
+  },
+  transactionTitle: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 17,
+    color: colors.textPrimary,
+  },
+  transactionMeta: {
+    fontFamily: typography.body,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  transactionAmount: {
+    fontFamily: typography.title,
+    fontSize: 18,
+    color: colors.textPrimary,
+    textAlign: 'right',
+  },
+  transactionAside: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  transactionCategory: {
+    fontFamily: typography.body,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  feedback: {
+    fontFamily: typography.body,
+    fontSize: 14,
+    color: colors.success,
+  },
+});
