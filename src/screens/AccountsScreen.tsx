@@ -30,6 +30,14 @@ export function AccountsScreen() {
   const [type, setType] = useState<AccountType>('cash');
   const [feedback, setFeedback] = useState('');
   const totalBalance = accounts.reduce((sum, account) => sum + account.currentBalance, 0);
+  const groupedBalances = accountTypeOptions
+    .map((option) => ({
+      label: option.label,
+      total: accounts
+        .filter((account) => account.type === option.value)
+        .reduce((sum, account) => sum + account.currentBalance, 0),
+    }))
+    .filter((item) => item.total !== 0);
 
   const addAccount = () => {
     const parsedOpeningBalance = Number.parseFloat(openingBalance.replace(',', '.'));
@@ -82,6 +90,20 @@ export function AccountsScreen() {
           <Text style={styles.accountBalance}>{formatCurrency(account.currentBalance)}</Text>
         </View>
       ))}
+
+      {groupedBalances.length > 0 ? (
+        <SectionCard
+          title="Distribuzione per tipologia"
+          description="Una lettura rapida di dove si concentra la tua liquidita tra contanti, carte e banca."
+        >
+          {groupedBalances.map((item) => (
+            <View key={item.label} style={styles.typeRow}>
+              <Text style={styles.typeLabel}>{item.label}</Text>
+              <Text style={styles.typeAmount}>{formatCurrency(item.total)}</Text>
+            </View>
+          ))}
+        </SectionCard>
+      ) : null}
 
       <SectionCard
         title="Aggiungi un conto"
@@ -139,5 +161,21 @@ const styles = StyleSheet.create({
     fontFamily: typography.body,
     fontSize: 14,
     color: colors.success,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  typeLabel: {
+    fontFamily: typography.body,
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
+  typeAmount: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 16,
+    color: colors.textPrimary,
   },
 });

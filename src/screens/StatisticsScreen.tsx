@@ -9,6 +9,10 @@ import { formatCurrency } from '../utils/format';
 
 export function StatisticsScreen() {
   const { currentMonth, previousMonth, currentYear, topExpenseCategories, accountBalances } = useStatistics();
+  const highestCategoryValue = topExpenseCategories[0]?.total ?? 0;
+  const highestAccountBalance = accountBalances[0]?.balance ?? 0;
+  const trendDelta = currentMonth.net - previousMonth.net;
+  const trendLabel = trendDelta >= 0 ? 'In crescita' : 'In flessione';
 
   return (
     <AppScreen
@@ -18,7 +22,7 @@ export function StatisticsScreen() {
       hero={
         <InfoCard
           title="Mese corrente"
-          subtitle={`${currentMonth.transactionsCount} movimenti registrati`}
+          subtitle={`${currentMonth.transactionsCount} movimenti registrati · ${trendLabel}`}
           value={formatCurrency(currentMonth.net)}
           tone="strong"
         />
@@ -41,6 +45,10 @@ export function StatisticsScreen() {
         title="Confronto periodi"
         description="Un colpo d'occhio sui periodi principali, utile per leggere l'andamento senza aprire filtri complessi."
       >
+        <View style={styles.trendBanner}>
+          <Text style={styles.trendTitle}>{trendLabel}</Text>
+          <Text style={styles.trendValue}>{`${trendDelta >= 0 ? '+' : ''}${formatCurrency(trendDelta)}`}</Text>
+        </View>
         <View style={styles.comparisonRow}>
           <Text style={styles.comparisonLabel}>Mese corrente</Text>
           <Text style={styles.comparisonValue}>{formatCurrency(currentMonth.net)}</Text>
@@ -61,9 +69,20 @@ export function StatisticsScreen() {
       >
         {topExpenseCategories.length > 0 ? (
           topExpenseCategories.map((item) => (
-            <View key={item.category} style={styles.comparisonRow}>
-              <Text style={styles.comparisonLabel}>{item.category}</Text>
-              <Text style={styles.comparisonValue}>{formatCurrency(item.total)}</Text>
+            <View key={item.category} style={styles.chartItem}>
+              <View style={styles.comparisonRow}>
+                <Text style={styles.comparisonLabel}>{item.category}</Text>
+                <Text style={styles.comparisonValue}>{formatCurrency(item.total)}</Text>
+              </View>
+              <View style={styles.barTrack}>
+                <View
+                  style={[
+                    styles.barFill,
+                    styles.expenseBar,
+                    { width: `${Math.max((item.total / Math.max(highestCategoryValue, 1)) * 100, 8)}%` },
+                  ]}
+                />
+              </View>
             </View>
           ))
         ) : (
@@ -76,9 +95,20 @@ export function StatisticsScreen() {
         description="Il peso dei diversi conti sul patrimonio disponibile al momento."
       >
         {accountBalances.map((item) => (
-          <View key={item.accountName} style={styles.comparisonRow}>
-            <Text style={styles.comparisonLabel}>{item.accountName}</Text>
-            <Text style={styles.comparisonValue}>{formatCurrency(item.balance)}</Text>
+          <View key={item.accountName} style={styles.chartItem}>
+            <View style={styles.comparisonRow}>
+              <Text style={styles.comparisonLabel}>{item.accountName}</Text>
+              <Text style={styles.comparisonValue}>{formatCurrency(item.balance)}</Text>
+            </View>
+            <View style={styles.barTrack}>
+              <View
+                style={[
+                  styles.barFill,
+                  styles.balanceBar,
+                  { width: `${Math.max((Math.abs(item.balance) / Math.max(Math.abs(highestAccountBalance), 1)) * 100, 8)}%` },
+                ]}
+              />
+            </View>
           </View>
         ))}
       </SectionCard>
@@ -128,5 +158,40 @@ const styles = StyleSheet.create({
     fontFamily: typography.body,
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  trendBanner: {
+    backgroundColor: colors.panelMuted,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: 4,
+  },
+  trendTitle: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  trendValue: {
+    fontFamily: typography.display,
+    fontSize: 24,
+    color: colors.textPrimary,
+  },
+  chartItem: {
+    gap: 8,
+  },
+  barTrack: {
+    height: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.panelMuted,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: radius.pill,
+  },
+  expenseBar: {
+    backgroundColor: colors.accent,
+  },
+  balanceBar: {
+    backgroundColor: colors.panelStrong,
   },
 });

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen } from '../components/AppScreen';
 import { ChoiceChips } from '../components/ChoiceChips';
@@ -9,7 +9,7 @@ import { SectionCard } from '../components/SectionCard';
 import { TextField } from '../components/TextField';
 import { useDatabase } from '../db/DatabaseProvider';
 import { useAccounts } from '../features/accounts/useAccounts';
-import { createTransaction } from '../features/transactions/transactionRepository';
+import { createTransaction, deleteTransaction } from '../features/transactions/transactionRepository';
 import { useTransactions } from '../features/transactions/useTransactions';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import type { TransactionType } from '../types/domain';
@@ -21,6 +21,13 @@ const transactionTypeOptions: Array<{ label: string; value: TransactionType }> =
   { label: 'Uscita', value: 'expense' },
   { label: 'Trasferimento', value: 'transfer' },
 ];
+
+const transactionFilterOptions = [
+  { label: 'Tutti', value: 'all' },
+  { label: 'Entrate', value: 'income' },
+  { label: 'Uscite', value: 'expense' },
+  { label: 'Trasferimenti', value: 'transfer' },
+] as const;
 
 export function TransactionsScreen() {
   const { database, refreshData } = useDatabase();
@@ -34,15 +41,33 @@ export function TransactionsScreen() {
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
   const [relatedAccountId, setRelatedAccountId] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [activeTypeFilter, setActiveTypeFilter] = useState<(typeof transactionFilterOptions)[number]['value']>('all');
+  const [activeAccountFilter, setActiveAccountFilter] = useState('all');
 
   const accountOptions = useMemo(
     () => accounts.map((account) => ({ label: account.name, value: account.id })),
     [accounts],
   );
 
+  const filterAccountOptions = useMemo(
+    () => [{ label: 'Tutti i conti', value: 'all' }, ...accountOptions],
+    [accountOptions],
+  );
+
   const targetAccountOptions = useMemo(
     () => accountOptions.filter((option) => option.value !== accountId),
     [accountId, accountOptions],
+  );
+
+  const filteredTransactions = useMemo(
+    () =>
+      transactions.filter((transaction) => {
+        const matchesType = activeTypeFilter === 'all' || transaction.type === activeTypeFilter;
+        const matchesAccount = activeAccountFilter === 'all' || transaction.accountId === activeAccountFilter;
+
+        return matchesType && matchesAccount;
+      }),
+    [activeAccountFilter, activeTypeFilter, transactions],
   );
 
   const saveTransaction = () => {
@@ -87,6 +112,16 @@ export function TransactionsScreen() {
     refreshData();
   };
 
+  const removeTransaction = (transactionId: string, transferGroupId: string | null) => {
+    deleteTransaction(database, {
+      id: transactionId,
+      transferGroupId,
+    });
+
+    setFeedback(transferGroupId ? 'Trasferimento eliminato da entrambi i conti.' : 'Movimento eliminato.');
+    refreshData();
+  };
+
   return (
     <AppScreen
       eyebrow="Movimenti"
@@ -96,7 +131,7 @@ export function TransactionsScreen() {
         <InfoCard
           title="Attivita registrata"
           subtitle="Movimenti presenti nel database locale"
-          value={`${transactions.length} movimenti`}
+          value={`${filteredTransactions.length} movimenti`}
         />
       }
     >
@@ -124,7 +159,20 @@ export function TransactionsScreen() {
         {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
       </SectionCard>
 
-      {transactions.map((transaction) => (
+      <SectionCard
+        title="Filtra il ledger"
+        description="Riduci il rumore visivo e lavora sui movimenti giusti senza perdere contesto."
+      >
+        <ChoiceChips
+          label="Tipo"
+          onSelect={setActiveTypeFilter}
+          options={transactionFilterOptions as unknown as Array<{ label: string; value: (typeof transactionFilterOptions)[number]['value'] }>}
+          selectedValue={activeTypeFilter}
+        />
+        <ChoiceChips label="Conto" onSelect={setActiveAccountFilter} options={filterAccountOptions} selectedValue={activeAccountFilter} />
+      </SectionCard>
+
+      {filteredTransactions.map((transaction) => (
         <View key={transaction.id} style={styles.transactionRow}>
           <View style={styles.transactionText}>
             <Text style={styles.transactionTitle}>{transaction.description}</Text>
@@ -136,6 +184,9 @@ export function TransactionsScreen() {
           <View style={styles.transactionAside}>
             <Text style={styles.transactionAmount}>{formatCurrency(transaction.amount)}</Text>
             <Text style={styles.transactionCategory}>{transaction.category}</Text>
+            <Pressable onPress={() => removeTransaction(transaction.id, transaction.transferGroupId)} style={styles.deleteChip}>
+              <Text style={styles.deleteChipLabel}>{transaction.transferGroupId ? 'Elimina gruppo' : 'Elimina'}</Text>
+            </Pressable>
           </View>
         </View>
       ))}
@@ -188,5 +239,18 @@ const styles = StyleSheet.create({
     fontFamily: typography.body,
     fontSize: 14,
     color: colors.success,
+  },
+  deleteChip: {
+    marginTop: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  deleteChipLabel: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 12,
+    color: colors.danger,
   },
 });

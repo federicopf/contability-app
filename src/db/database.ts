@@ -37,6 +37,7 @@ export function initializeDatabase() {
       booked_at TEXT NOT NULL,
       note TEXT,
       related_account_id TEXT,
+      transfer_group_id TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (account_id) REFERENCES accounts (id)
     );
@@ -76,6 +77,7 @@ export function initializeDatabase() {
   `);
 
   ensureColumn(db, 'obligations', 'paid_amount', 'REAL NOT NULL DEFAULT 0');
+  ensureColumn(db, 'ledger_transactions', 'transfer_group_id', 'TEXT');
 
   seedStarterAccounts(db);
 
