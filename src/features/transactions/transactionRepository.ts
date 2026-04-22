@@ -146,6 +146,86 @@ export function deleteTransaction(database: SQLite.SQLiteDatabase, input: { id: 
   database.runSync('DELETE FROM ledger_transactions WHERE id = ?', [input.id]);
 }
 
+export function updateTransaction(
+  database: SQLite.SQLiteDatabase,
+  input: {
+    id: string;
+    transferGroupId?: string | null;
+    type: TransactionType;
+    amount: number;
+    category: string;
+    description: string;
+    bookedAt: string;
+    accountId: string;
+    relatedAccountId?: string;
+  },
+) {
+  const cleanedDescription = input.description.trim();
+  const cleanedCategory = input.category.trim() || defaultCategory(input.type);
+
+  if (input.transferGroupId) {
+    if (!input.relatedAccountId) {
+      throw new Error('Per aggiornare un trasferimento serve un conto di destinazione.');
+    }
+
+    const destinationAccountId = input.relatedAccountId;
+    const transferGroupId = input.transferGroupId;
+
+    database.withTransactionSync(() => {
+      database.runSync(
+        `UPDATE ledger_transactions
+         SET account_id = ?, type = ?, amount = ?, category = ?, description = ?, booked_at = ?, related_account_id = ?
+         WHERE transfer_group_id = ? AND account_id = ?`,
+        [
+          input.accountId,
+          'expense',
+          input.amount,
+          'Trasferimento',
+          cleanedDescription,
+          input.bookedAt,
+          destinationAccountId,
+          transferGroupId,
+          input.accountId,
+        ],
+      );
+      database.runSync(
+        `UPDATE ledger_transactions
+         SET account_id = ?, type = ?, amount = ?, category = ?, description = ?, booked_at = ?, related_account_id = ?
+         WHERE transfer_group_id = ? AND account_id = ?`,
+        [
+          destinationAccountId,
+          'income',
+          input.amount,
+          'Trasferimento',
+          cleanedDescription,
+          input.bookedAt,
+          input.accountId,
+          transferGroupId,
+          destinationAccountId,
+        ],
+      );
+    });
+
+    return;
+  }
+
+  database.runSync(
+    `UPDATE ledger_transactions
+     SET account_id = ?, type = ?, amount = ?, category = ?, description = ?, booked_at = ?, related_account_id = ?
+     WHERE id = ?`,
+    [
+      input.accountId,
+      input.type,
+      input.amount,
+      cleanedCategory,
+      cleanedDescription,
+      input.bookedAt,
+      input.relatedAccountId ?? null,
+      input.id,
+    ],
+  );
+}
+
 function defaultCategory(type: TransactionType) {
   switch (type) {
     case 'income':

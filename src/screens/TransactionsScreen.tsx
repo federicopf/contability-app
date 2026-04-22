@@ -9,7 +9,7 @@ import { SectionCard } from '../components/SectionCard';
 import { TextField } from '../components/TextField';
 import { useDatabase } from '../db/DatabaseProvider';
 import { useAccounts } from '../features/accounts/useAccounts';
-import { createTransaction, deleteTransaction } from '../features/transactions/transactionRepository';
+import { createTransaction, deleteTransaction, updateTransaction } from '../features/transactions/transactionRepository';
 import { useTransactions } from '../features/transactions/useTransactions';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import type { TransactionType } from '../types/domain';
@@ -41,6 +41,8 @@ export function TransactionsScreen() {
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
   const [relatedAccountId, setRelatedAccountId] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [editingTransferGroupId, setEditingTransferGroupId] = useState<string | null>(null);
   const [activeTypeFilter, setActiveTypeFilter] = useState<(typeof transactionFilterOptions)[number]['value']>('all');
   const [activeAccountFilter, setActiveAccountFilter] = useState('all');
 
@@ -93,23 +95,76 @@ export function TransactionsScreen() {
       return;
     }
 
-    createTransaction(database, {
-      type,
-      amount: parsedAmount,
-      category,
-      description,
-      bookedAt,
-      accountId,
-      relatedAccountId: type === 'transfer' ? relatedAccountId : undefined,
-    });
+    if (editingTransactionId) {
+      updateTransaction(database, {
+        id: editingTransactionId,
+        transferGroupId: editingTransferGroupId,
+        type,
+        amount: parsedAmount,
+        category,
+        description,
+        bookedAt,
+        accountId,
+        relatedAccountId: type === 'transfer' ? relatedAccountId : undefined,
+      });
+    } else {
+      createTransaction(database, {
+        type,
+        amount: parsedAmount,
+        category,
+        description,
+        bookedAt,
+        accountId,
+        relatedAccountId: type === 'transfer' ? relatedAccountId : undefined,
+      });
+    }
 
     setAmount('0');
     setDescription('');
     setCategory('');
     setBookedAt(todayIsoDate());
     setRelatedAccountId('');
-    setFeedback('Movimento registrato correttamente.');
+    setEditingTransactionId(null);
+    setEditingTransferGroupId(null);
+    setFeedback(editingTransactionId ? 'Movimento aggiornato correttamente.' : 'Movimento registrato correttamente.');
     refreshData();
+  };
+
+  const startEditingTransaction = (transactionId: string) => {
+    const transaction = transactions.find((item) => item.id === transactionId);
+
+    if (!transaction) {
+      return;
+    }
+
+    const derivedType: TransactionType = transaction.transferGroupId ? 'transfer' : transaction.type;
+
+    setEditingTransactionId(transaction.id);
+    setEditingTransferGroupId(transaction.transferGroupId);
+    setType(derivedType);
+    setAmount(String(transaction.amount));
+    setDescription(transaction.description);
+    setCategory(transaction.transferGroupId ? 'Trasferimento' : transaction.category);
+    setBookedAt(transaction.bookedAt);
+    setAccountId(transaction.accountId);
+    const destinationAccount =
+      transaction.transferGroupId && transaction.relatedAccountName
+        ? accounts.find((item) => item.name === transaction.relatedAccountName)?.id ?? ''
+        : '';
+    setRelatedAccountId(destinationAccount);
+    setFeedback('Modifica il movimento e salva per aggiornare il ledger.');
+  };
+
+  const cancelEditing = () => {
+    setEditingTransactionId(null);
+    setEditingTransferGroupId(null);
+    setType('expense');
+    setAmount('0');
+    setDescription('');
+    setCategory('');
+    setBookedAt(todayIsoDate());
+    setRelatedAccountId('');
+    setFeedback('');
   };
 
   const removeTransaction = (transactionId: string, transferGroupId: string | null) => {
@@ -136,7 +191,7 @@ export function TransactionsScreen() {
       }
     >
       <SectionCard
-        title="Nuovo movimento"
+        title={editingTransactionId ? 'Modifica movimento' : 'Nuovo movimento'}
         description="Usa il form per inserire entrate, uscite o trasferimenti. I trasferimenti generano due registrazioni coerenti tra conto origine e destinazione."
       >
         <ChoiceChips label="Tipo movimento" onSelect={setType} options={transactionTypeOptions} selectedValue={type} />
@@ -155,7 +210,8 @@ export function TransactionsScreen() {
             selectedValue={relatedAccountId}
           />
         ) : null}
-        <PrimaryButton label="Salva movimento" onPress={saveTransaction} />
+        <PrimaryButton label={editingTransactionId ? 'Aggiorna movimento' : 'Salva movimento'} onPress={saveTransaction} />
+        {editingTransactionId ? <PrimaryButton label="Annulla modifica" onPress={cancelEditing} tone="secondary" /> : null}
         {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
       </SectionCard>
 
@@ -177,13 +233,16 @@ export function TransactionsScreen() {
           <View style={styles.transactionText}>
             <Text style={styles.transactionTitle}>{transaction.description}</Text>
             <Text style={styles.transactionMeta}>
-              {formatTransactionType(transaction.type)} · {transaction.accountName}
+              {formatTransactionType(transaction.transferGroupId ? 'transfer' : transaction.type)} · {transaction.accountName}
               {transaction.relatedAccountName ? ` -> ${transaction.relatedAccountName}` : ''} · {formatDate(transaction.bookedAt)}
             </Text>
           </View>
           <View style={styles.transactionAside}>
             <Text style={styles.transactionAmount}>{formatCurrency(transaction.amount)}</Text>
             <Text style={styles.transactionCategory}>{transaction.category}</Text>
+            <Pressable onPress={() => startEditingTransaction(transaction.id)} style={styles.editChip}>
+              <Text style={styles.editChipLabel}>Modifica</Text>
+            </Pressable>
             <Pressable onPress={() => removeTransaction(transaction.id, transaction.transferGroupId)} style={styles.deleteChip}>
               <Text style={styles.deleteChipLabel}>{transaction.transferGroupId ? 'Elimina gruppo' : 'Elimina'}</Text>
             </Pressable>
@@ -252,5 +311,19 @@ const styles = StyleSheet.create({
     fontFamily: typography.bodyStrong,
     fontSize: 12,
     color: colors.danger,
+  },
+  editChip: {
+    marginTop: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.panelMuted,
+  },
+  editChipLabel: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 12,
+    color: colors.textPrimary,
   },
 });
