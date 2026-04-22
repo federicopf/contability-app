@@ -41,3 +41,22 @@ export function formatTransactionType(type: string) {
       return type;
   }
 }
+
+export function formatObligationType(type: string) {
+  return type === 'credit' ? 'Credito' : 'Debito';
+}
+
+export function formatSubscriptionFrequency(frequency: string) {
+  switch (frequency) {
+    case 'weekly':
+      return 'Settimanale';
+    case 'monthly':
+      return 'Mensile';
+    case 'quarterly':
+      return 'Trimestrale';
+    case 'yearly':
+      return 'Annuale';
+    default:
+      return frequency;
+  }
+}

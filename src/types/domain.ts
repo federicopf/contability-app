@@ -31,6 +31,7 @@ export type Obligation = {
   amount: number;
   dueAt: string;
   status: 'open' | 'partial' | 'closed';
+  paidAmount: number;
 };
 
 export type Subscription = {
@@ -40,4 +41,5 @@ export type Subscription = {
   frequency: SubscriptionFrequency;
   nextBillingDate: string;
   active: boolean;
+  accountId?: string | null;
 };

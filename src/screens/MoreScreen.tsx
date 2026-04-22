@@ -1,28 +1,253 @@
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen } from '../components/AppScreen';
+import { ChoiceChips } from '../components/ChoiceChips';
 import { InfoCard } from '../components/InfoCard';
+import { PrimaryButton } from '../components/PrimaryButton';
+import { SectionCard } from '../components/SectionCard';
+import { TextField } from '../components/TextField';
+import { useDatabase } from '../db/DatabaseProvider';
+import { useAccounts } from '../features/accounts/useAccounts';
+import { createObligation, registerObligationPayment } from '../features/obligations/obligationRepository';
+import { useObligations } from '../features/obligations/useObligations';
+import { createSubscription, renewSubscription } from '../features/subscriptions/subscriptionRepository';
+import { useSubscriptions } from '../features/subscriptions/useSubscriptions';
 import { colors, radius, spacing, typography } from '../theme/tokens';
+import type { ObligationType, SubscriptionFrequency } from '../types/domain';
+import { todayIsoDate } from '../utils/date';
+import {
+  formatCurrency,
+  formatDate,
+  formatObligationType,
+  formatSubscriptionFrequency,
+} from '../utils/format';
 
-const modules = [
-  { title: 'Debiti e crediti', text: 'Tracciamento di somme da ricevere o pagare, con scadenze e stati.' },
-  { title: 'Abbonamenti', text: 'Ricorrenze mensili o annuali con costo totale e prossima scadenza.' },
+const obligationTypeOptions: Array<{ label: string; value: ObligationType }> = [
+  { label: 'Debito', value: 'debt' },
+  { label: 'Credito', value: 'credit' },
+];
+
+const subscriptionFrequencyOptions: Array<{ label: string; value: SubscriptionFrequency }> = [
+  { label: 'Settimanale', value: 'weekly' },
+  { label: 'Mensile', value: 'monthly' },
+  { label: 'Trimestrale', value: 'quarterly' },
+  { label: 'Annuale', value: 'yearly' },
 ];
 
 export function MoreScreen() {
+  const { database, refreshData } = useDatabase();
+  const { accounts } = useAccounts();
+  const { obligations } = useObligations();
+  const { subscriptions } = useSubscriptions();
+  const [obligationType, setObligationType] = useState<ObligationType>('debt');
+  const [counterparty, setCounterparty] = useState('');
+  const [obligationAmount, setObligationAmount] = useState('0');
+  const [obligationDueAt, setObligationDueAt] = useState(todayIsoDate());
+  const [paymentAmount, setPaymentAmount] = useState('0');
+  const [subscriptionName, setSubscriptionName] = useState('');
+  const [subscriptionAmount, setSubscriptionAmount] = useState('0');
+  const [subscriptionFrequency, setSubscriptionFrequency] = useState<SubscriptionFrequency>('monthly');
+  const [nextBillingDate, setNextBillingDate] = useState(todayIsoDate());
+  const [subscriptionAccountId, setSubscriptionAccountId] = useState(accounts[0]?.id ?? '');
+  const [feedback, setFeedback] = useState('');
+
+  const accountOptions = useMemo(
+    () => accounts.map((account) => ({ label: account.name, value: account.id })),
+    [accounts],
+  );
+
+  const activeItemsCount = obligations.filter((item) => item.status !== 'closed').length + subscriptions.filter((item) => item.active).length;
+
+  const saveObligation = () => {
+    const parsedAmount = Number.parseFloat(obligationAmount.replace(',', '.'));
+
+    if (!counterparty.trim()) {
+      setFeedback('Inserisci la controparte del debito o credito.');
+      return;
+    }
+
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setFeedback('L\'importo di debito o credito deve essere valido.');
+      return;
+    }
+
+    createObligation(database, {
+      type: obligationType,
+      counterparty,
+      amount: parsedAmount,
+      dueAt: obligationDueAt,
+    });
+
+    setCounterparty('');
+    setObligationAmount('0');
+    setObligationDueAt(todayIsoDate());
+    setFeedback('Debito o credito salvato correttamente.');
+    refreshData();
+  };
+
+  const addPayment = (obligationId: string) => {
+    const parsedAmount = Number.parseFloat(paymentAmount.replace(',', '.'));
+
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setFeedback('Il pagamento parziale deve essere maggiore di zero.');
+      return;
+    }
+
+    registerObligationPayment(database, {
+      obligationId,
+      amount: parsedAmount,
+      paidAt: todayIsoDate(),
+    });
+
+    setPaymentAmount('0');
+    setFeedback('Pagamento o incasso parziale registrato.');
+    refreshData();
+  };
+
+  const saveSubscription = () => {
+    const parsedAmount = Number.parseFloat(subscriptionAmount.replace(',', '.'));
+
+    if (!subscriptionName.trim()) {
+      setFeedback('Inserisci il nome dell\'abbonamento.');
+      return;
+    }
+
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setFeedback('L\'importo dell\'abbonamento deve essere valido.');
+      return;
+    }
+
+    createSubscription(database, {
+      name: subscriptionName,
+      amount: parsedAmount,
+      frequency: subscriptionFrequency,
+      nextBillingDate,
+      accountId: subscriptionAccountId || undefined,
+    });
+
+    setSubscriptionName('');
+    setSubscriptionAmount('0');
+    setSubscriptionFrequency('monthly');
+    setNextBillingDate(todayIsoDate());
+    setFeedback('Abbonamento registrato correttamente.');
+    refreshData();
+  };
+
+  const handleRenewSubscription = (subscriptionId: string) => {
+    renewSubscription(database, { subscriptionId });
+    setFeedback('Rinnovo registrato e prossima scadenza aggiornata.');
+    refreshData();
+  };
+
   return (
     <AppScreen
       eyebrow="Altro"
       title="Scadenze e impegni sotto controllo"
-      description="Qui confluiranno i moduli complementari: debiti, crediti e abbonamenti, tutti con una UX semplice e leggibile anche nell'uso quotidiano."
-      hero={<InfoCard title="Promemoria attivi" subtitle="Elementi che richiedono attenzione nei prossimi 30 giorni" value="5 elementi" />}
+      description="Debiti, crediti e abbonamenti sono ora operativi in locale, con scadenze chiare, rinnovi rapidi e stato sempre leggibile."
+      hero={
+        <InfoCard
+          title="Promemoria attivi"
+          subtitle="Somma di obbligazioni aperte e abbonamenti attivi"
+          value={`${activeItemsCount} elementi`}
+        />
+      }
     >
-      {modules.map((module) => (
-        <View key={module.title} style={styles.moduleCard}>
-          <Text style={styles.moduleTitle}>{module.title}</Text>
-          <Text style={styles.moduleText}>{module.text}</Text>
-        </View>
-      ))}
+      <SectionCard
+        title="Nuovo debito o credito"
+        description="Registra somme da pagare o da ricevere, con data di scadenza e stato aggiornabile tramite pagamenti parziali."
+      >
+        <ChoiceChips label="Tipo" onSelect={setObligationType} options={obligationTypeOptions} selectedValue={obligationType} />
+        <TextField label="Controparte" onChangeText={setCounterparty} placeholder="Es. Marco Rossi" value={counterparty} />
+        <TextField label="Importo" keyboardType="numeric" onChangeText={setObligationAmount} placeholder="0,00" value={obligationAmount} />
+        <TextField label="Scadenza" onChangeText={setObligationDueAt} placeholder="YYYY-MM-DD" value={obligationDueAt} />
+        <PrimaryButton label="Salva debito o credito" onPress={saveObligation} />
+      </SectionCard>
+
+      <SectionCard
+        title="Elenco debiti e crediti"
+        description="Ogni voce mostra residuo e stato. Il pagamento parziale usa l'importo inserito nel campo dedicato qui sotto."
+      >
+        <TextField
+          label="Importo pagamento parziale"
+          keyboardType="numeric"
+          onChangeText={setPaymentAmount}
+          placeholder="0,00"
+          value={paymentAmount}
+        />
+        {obligations.length > 0 ? (
+          obligations.map((item) => (
+            <View key={item.id} style={styles.moduleCard}>
+              <View style={styles.moduleHeaderRow}>
+                <View style={styles.moduleTextWrap}>
+                  <Text style={styles.moduleTitle}>{item.counterparty}</Text>
+                  <Text style={styles.moduleText}>
+                    {formatObligationType(item.type)} · Scade il {formatDate(item.dueAt)} · Stato {item.status}
+                  </Text>
+                </View>
+                <Text style={styles.moduleAmount}>{formatCurrency(item.remainingAmount)}</Text>
+              </View>
+              <Text style={styles.moduleSubtle}>Totale {formatCurrency(item.amount)} · Incassato/pagato {formatCurrency(item.paidAmount)}</Text>
+              {item.status !== 'closed' ? (
+                <PrimaryButton label="Registra parziale" onPress={() => addPayment(item.id)} tone="secondary" />
+              ) : null}
+            </View>
+          ))
+        ) : (
+          <Text style={styles.moduleText}>Nessun debito o credito registrato per ora.</Text>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Nuovo abbonamento"
+        description="Registra la ricorrenza e, se vuoi, associa un conto: al rinnovo verra creato anche il movimento di spesa."
+      >
+        <TextField label="Nome" onChangeText={setSubscriptionName} placeholder="Es. Netflix" value={subscriptionName} />
+        <TextField label="Importo" keyboardType="numeric" onChangeText={setSubscriptionAmount} placeholder="0,00" value={subscriptionAmount} />
+        <TextField label="Prossima scadenza" onChangeText={setNextBillingDate} placeholder="YYYY-MM-DD" value={nextBillingDate} />
+        <ChoiceChips
+          label="Frequenza"
+          onSelect={setSubscriptionFrequency}
+          options={subscriptionFrequencyOptions}
+          selectedValue={subscriptionFrequency}
+        />
+        {accountOptions.length > 0 ? (
+          <ChoiceChips
+            label="Conto associato"
+            onSelect={setSubscriptionAccountId}
+            options={accountOptions}
+            selectedValue={subscriptionAccountId}
+          />
+        ) : null}
+        <PrimaryButton label="Salva abbonamento" onPress={saveSubscription} />
+      </SectionCard>
+
+      <SectionCard
+        title="Abbonamenti attivi"
+        description="Il rinnovo sposta avanti la data e, se il conto e associato, registra anche la spesa nel ledger."
+      >
+        {subscriptions.length > 0 ? (
+          subscriptions.map((item) => (
+            <View key={item.id} style={styles.moduleCard}>
+              <View style={styles.moduleHeaderRow}>
+                <View style={styles.moduleTextWrap}>
+                  <Text style={styles.moduleTitle}>{item.name}</Text>
+                  <Text style={styles.moduleText}>
+                    {formatSubscriptionFrequency(item.frequency)} · Prossima data {formatDate(item.nextBillingDate)}
+                  </Text>
+                </View>
+                <Text style={styles.moduleAmount}>{formatCurrency(item.amount)}</Text>
+              </View>
+              <Text style={styles.moduleSubtle}>Conto associato: {item.accountName ?? 'Nessuno'}</Text>
+              <PrimaryButton label="Segna rinnovo" onPress={() => handleRenewSubscription(item.id)} tone="secondary" />
+            </View>
+          ))
+        ) : (
+          <Text style={styles.moduleText}>Nessun abbonamento registrato per ora.</Text>
+        )}
+      </SectionCard>
+
+      {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
     </AppScreen>
   );
 }
@@ -36,6 +261,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     gap: 6,
   },
+  moduleHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  moduleTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
   moduleTitle: {
     fontFamily: typography.title,
     fontSize: 18,
@@ -46,5 +280,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     color: colors.textSecondary,
+  },
+  moduleSubtle: {
+    fontFamily: typography.body,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  moduleAmount: {
+    fontFamily: typography.title,
+    fontSize: 18,
+    color: colors.textPrimary,
+    alignSelf: 'center',
+  },
+  feedback: {
+    fontFamily: typography.body,
+    fontSize: 14,
+    color: colors.success,
   },
 });

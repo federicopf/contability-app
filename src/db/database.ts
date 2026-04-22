@@ -48,8 +48,18 @@ export function initializeDatabase() {
       amount REAL NOT NULL,
       due_at TEXT NOT NULL,
       status TEXT NOT NULL,
+      paid_amount REAL NOT NULL DEFAULT 0,
       note TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS obligation_payments (
+      id TEXT PRIMARY KEY NOT NULL,
+      obligation_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      paid_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (obligation_id) REFERENCES obligations (id)
     );
 
     CREATE TABLE IF NOT EXISTS subscriptions (
@@ -65,9 +75,20 @@ export function initializeDatabase() {
     );
   `);
 
+  ensureColumn(db, 'obligations', 'paid_amount', 'REAL NOT NULL DEFAULT 0');
+
   seedStarterAccounts(db);
 
   return db;
+}
+
+function ensureColumn(db: SQLite.SQLiteDatabase, tableName: string, columnName: string, sqlDefinition: string) {
+  const columns = db.getAllSync<{ name: string }>(`PRAGMA table_info(${tableName})`);
+  const hasColumn = columns.some((column) => column.name === columnName);
+
+  if (!hasColumn) {
+    db.execSync(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${sqlDefinition};`);
+  }
 }
 
 function seedStarterAccounts(db: SQLite.SQLiteDatabase) {
