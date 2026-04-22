@@ -81,3 +81,10 @@ export function registerObligationPayment(
     ]);
   });
 }
+
+export function deleteObligation(database: SQLite.SQLiteDatabase, input: { obligationId: string }) {
+  database.withTransactionSync(() => {
+    database.runSync('DELETE FROM obligation_payments WHERE obligation_id = ?', [input.obligationId]);
+    database.runSync('DELETE FROM obligations WHERE id = ?', [input.obligationId]);
+  });
+}

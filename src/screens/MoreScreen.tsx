@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen } from '../components/AppScreen';
 import { ChoiceChips } from '../components/ChoiceChips';
@@ -9,9 +9,14 @@ import { SectionCard } from '../components/SectionCard';
 import { TextField } from '../components/TextField';
 import { useDatabase } from '../db/DatabaseProvider';
 import { useAccounts } from '../features/accounts/useAccounts';
-import { createObligation, registerObligationPayment } from '../features/obligations/obligationRepository';
+import { createObligation, deleteObligation, registerObligationPayment } from '../features/obligations/obligationRepository';
 import { useObligations } from '../features/obligations/useObligations';
-import { createSubscription, renewSubscription } from '../features/subscriptions/subscriptionRepository';
+import {
+  createSubscription,
+  deleteSubscription,
+  renewSubscription,
+  toggleSubscriptionActive,
+} from '../features/subscriptions/subscriptionRepository';
 import { useSubscriptions } from '../features/subscriptions/useSubscriptions';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import type { ObligationType, SubscriptionFrequency } from '../types/domain';
@@ -140,6 +145,24 @@ export function MoreScreen() {
     refreshData();
   };
 
+  const handleDeleteObligation = (obligationId: string) => {
+    deleteObligation(database, { obligationId });
+    setFeedback('Debito o credito eliminato.');
+    refreshData();
+  };
+
+  const handleToggleSubscription = (subscriptionId: string, active: boolean) => {
+    toggleSubscriptionActive(database, { subscriptionId, active: !active });
+    setFeedback(active ? 'Abbonamento messo in pausa.' : 'Abbonamento riattivato.');
+    refreshData();
+  };
+
+  const handleDeleteSubscription = (subscriptionId: string) => {
+    deleteSubscription(database, { subscriptionId });
+    setFeedback('Abbonamento eliminato.');
+    refreshData();
+  };
+
   return (
     <AppScreen
       eyebrow="Altro"
@@ -188,9 +211,14 @@ export function MoreScreen() {
                 <Text style={styles.moduleAmount}>{formatCurrency(item.remainingAmount)}</Text>
               </View>
               <Text style={styles.moduleSubtle}>Totale {formatCurrency(item.amount)} · Incassato/pagato {formatCurrency(item.paidAmount)}</Text>
-              {item.status !== 'closed' ? (
-                <PrimaryButton label="Registra parziale" onPress={() => addPayment(item.id)} tone="secondary" />
-              ) : null}
+              <View style={styles.rowActions}>
+                {item.status !== 'closed' ? (
+                  <PrimaryButton label="Registra parziale" onPress={() => addPayment(item.id)} tone="secondary" />
+                ) : null}
+                <Pressable onPress={() => handleDeleteObligation(item.id)} style={styles.inlineDangerAction}>
+                  <Text style={styles.inlineDangerLabel}>Elimina</Text>
+                </Pressable>
+              </View>
             </View>
           ))
         ) : (
@@ -239,7 +267,15 @@ export function MoreScreen() {
                 <Text style={styles.moduleAmount}>{formatCurrency(item.amount)}</Text>
               </View>
               <Text style={styles.moduleSubtle}>Conto associato: {item.accountName ?? 'Nessuno'}</Text>
-              <PrimaryButton label="Segna rinnovo" onPress={() => handleRenewSubscription(item.id)} tone="secondary" />
+              <View style={styles.rowActions}>
+                {item.active ? <PrimaryButton label="Segna rinnovo" onPress={() => handleRenewSubscription(item.id)} tone="secondary" /> : null}
+                <Pressable onPress={() => handleToggleSubscription(item.id, item.active)} style={styles.inlineAction}>
+                  <Text style={styles.inlineActionLabel}>{item.active ? 'Pausa' : 'Riattiva'}</Text>
+                </Pressable>
+                <Pressable onPress={() => handleDeleteSubscription(item.id)} style={styles.inlineDangerAction}>
+                  <Text style={styles.inlineDangerLabel}>Elimina</Text>
+                </Pressable>
+              </View>
             </View>
           ))
         ) : (
@@ -296,5 +332,35 @@ const styles = StyleSheet.create({
     fontFamily: typography.body,
     fontSize: 14,
     color: colors.success,
+  },
+  rowActions: {
+    gap: 8,
+  },
+  inlineAction: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.panelMuted,
+  },
+  inlineActionLabel: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 12,
+    color: colors.textPrimary,
+  },
+  inlineDangerAction: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  inlineDangerLabel: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 12,
+    color: colors.danger,
   },
 });

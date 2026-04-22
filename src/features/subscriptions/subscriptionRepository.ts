@@ -102,6 +102,17 @@ export function renewSubscription(database: SQLite.SQLiteDatabase, input: { subs
   });
 }
 
+export function toggleSubscriptionActive(
+  database: SQLite.SQLiteDatabase,
+  input: { subscriptionId: string; active: boolean },
+) {
+  database.runSync('UPDATE subscriptions SET active = ? WHERE id = ?', [input.active ? 1 : 0, input.subscriptionId]);
+}
+
+export function deleteSubscription(database: SQLite.SQLiteDatabase, input: { subscriptionId: string }) {
+  database.runSync('DELETE FROM subscriptions WHERE id = ?', [input.subscriptionId]);
+}
+
 function advanceDate(currentDate: Date, frequency: SubscriptionFrequency) {
   const nextDate = new Date(currentDate);
 

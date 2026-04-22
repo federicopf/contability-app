@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen } from '../components/AppScreen';
 import { ChoiceChips } from '../components/ChoiceChips';
@@ -8,7 +8,7 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { SectionCard } from '../components/SectionCard';
 import { TextField } from '../components/TextField';
 import { useDatabase } from '../db/DatabaseProvider';
-import { createAccount } from '../features/accounts/accountRepository';
+import { createAccount, deleteAccount, updateAccount } from '../features/accounts/accountRepository';
 import { useAccounts } from '../features/accounts/useAccounts';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import type { AccountType } from '../types/domain';
@@ -29,6 +29,7 @@ export function AccountsScreen() {
   const [openingBalance, setOpeningBalance] = useState('0');
   const [type, setType] = useState<AccountType>('cash');
   const [feedback, setFeedback] = useState('');
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const totalBalance = accounts.reduce((sum, account) => sum + account.currentBalance, 0);
   const groupedBalances = accountTypeOptions
     .map((option) => ({
@@ -39,7 +40,7 @@ export function AccountsScreen() {
     }))
     .filter((item) => item.total !== 0);
 
-  const addAccount = () => {
+  const saveAccount = () => {
     const parsedOpeningBalance = Number.parseFloat(openingBalance.replace(',', '.'));
 
     if (!name.trim()) {
@@ -52,17 +53,65 @@ export function AccountsScreen() {
       return;
     }
 
-    createAccount(database, {
-      name,
-      type,
-      openingBalance: parsedOpeningBalance,
-    });
+    if (editingAccountId) {
+      updateAccount(database, {
+        id: editingAccountId,
+        name,
+        type,
+        openingBalance: parsedOpeningBalance,
+      });
+    } else {
+      createAccount(database, {
+        name,
+        type,
+        openingBalance: parsedOpeningBalance,
+      });
+    }
 
     setName('');
     setOpeningBalance('0');
     setType('cash');
-    setFeedback('Conto salvato nel database locale.');
+    setEditingAccountId(null);
+    setFeedback(editingAccountId ? 'Conto aggiornato correttamente.' : 'Conto salvato nel database locale.');
     refreshData();
+  };
+
+  const startEditing = (accountId: string) => {
+    const account = accounts.find((item) => item.id === accountId);
+
+    if (!account) {
+      return;
+    }
+
+    setEditingAccountId(account.id);
+    setName(account.name);
+    setOpeningBalance(String(account.openingBalance));
+    setType(account.type);
+    setFeedback('Modifica il conto e salva per aggiornare i dati.');
+  };
+
+  const handleDeleteAccount = (accountId: string) => {
+    try {
+      deleteAccount(database, { id: accountId });
+      if (editingAccountId === accountId) {
+        setEditingAccountId(null);
+        setName('');
+        setOpeningBalance('0');
+        setType('cash');
+      }
+      setFeedback('Conto eliminato.');
+      refreshData();
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Impossibile eliminare il conto.');
+    }
+  };
+
+  const cancelEditing = () => {
+    setEditingAccountId(null);
+    setName('');
+    setOpeningBalance('0');
+    setType('cash');
+    setFeedback('');
   };
 
   return (
@@ -87,7 +136,17 @@ export function AccountsScreen() {
               {formatAccountType(account.type)} · Saldo iniziale {formatCurrency(account.openingBalance)}
             </Text>
           </View>
-          <Text style={styles.accountBalance}>{formatCurrency(account.currentBalance)}</Text>
+          <View style={styles.accountAside}>
+            <Text style={styles.accountBalance}>{formatCurrency(account.currentBalance)}</Text>
+            <View style={styles.actionRow}>
+              <Pressable onPress={() => startEditing(account.id)} style={styles.inlineAction}>
+                <Text style={styles.inlineActionLabel}>Modifica</Text>
+              </Pressable>
+              <Pressable onPress={() => handleDeleteAccount(account.id)} style={styles.inlineDangerAction}>
+                <Text style={styles.inlineDangerLabel}>Elimina</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
       ))}
 
@@ -106,8 +165,8 @@ export function AccountsScreen() {
       ) : null}
 
       <SectionCard
-        title="Aggiungi un conto"
-        description="Questa prima versione salva subito in SQLite. I saldi correnti restano derivati da saldo iniziale e movimenti registrati."
+        title={editingAccountId ? 'Modifica conto' : 'Aggiungi un conto'}
+        description="I saldi correnti restano derivati da saldo iniziale e movimenti registrati. I conti con storico collegato non possono essere eliminati per evitare incoerenze."
       >
         <TextField label="Nome conto" onChangeText={setName} placeholder="Es. Carta viaggi" value={name} />
         <TextField
@@ -118,7 +177,8 @@ export function AccountsScreen() {
           value={openingBalance}
         />
         <ChoiceChips label="Tipologia" onSelect={setType} options={accountTypeOptions} selectedValue={type} />
-        <PrimaryButton label="Salva conto" onPress={addAccount} />
+        <PrimaryButton label={editingAccountId ? 'Aggiorna conto' : 'Salva conto'} onPress={saveAccount} />
+        {editingAccountId ? <PrimaryButton label="Annulla modifica" onPress={cancelEditing} tone="secondary" /> : null}
         {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
       </SectionCard>
     </AppScreen>
@@ -157,10 +217,44 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     alignSelf: 'center',
   },
+  accountAside: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 8,
+  },
   feedback: {
     fontFamily: typography.body,
     fontSize: 14,
     color: colors.success,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  inlineAction: {
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.panelMuted,
+  },
+  inlineActionLabel: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 12,
+    color: colors.textPrimary,
+  },
+  inlineDangerAction: {
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  inlineDangerLabel: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 12,
+    color: colors.danger,
   },
   typeRow: {
     flexDirection: 'row',

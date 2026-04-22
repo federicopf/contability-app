@@ -62,3 +62,32 @@ export function createAccount(
     [generateId('account'), input.name.trim(), input.type, input.openingBalance, 'EUR'],
   );
 }
+
+export function updateAccount(
+  database: SQLite.SQLiteDatabase,
+  input: { id: string; name: string; type: AccountType; openingBalance: number },
+) {
+  database.runSync('UPDATE accounts SET name = ?, type = ?, opening_balance = ? WHERE id = ?', [
+    input.name.trim(),
+    input.type,
+    input.openingBalance,
+    input.id,
+  ]);
+}
+
+export function deleteAccount(database: SQLite.SQLiteDatabase, input: { id: string }) {
+  const transactionCount = database.getFirstSync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM ledger_transactions WHERE account_id = ? OR related_account_id = ?',
+    [input.id, input.id],
+  );
+  const subscriptionCount = database.getFirstSync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM subscriptions WHERE account_id = ?',
+    [input.id],
+  );
+
+  if ((transactionCount?.count ?? 0) > 0 || (subscriptionCount?.count ?? 0) > 0) {
+    throw new Error('Non puoi eliminare un conto che ha gia movimenti o abbonamenti collegati.');
+  }
+
+  database.runSync('DELETE FROM accounts WHERE id = ?', [input.id]);
+}
