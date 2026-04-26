@@ -12,7 +12,6 @@ import { useAccounts } from '../features/accounts/useAccounts';
 import {
   createObligation,
   deleteObligation,
-  registerObligationPayment,
   updateObligation,
 } from '../features/obligations/obligationRepository';
 import { useObligations } from '../features/obligations/useObligations';
@@ -52,10 +51,10 @@ export function MoreScreen() {
   const { obligations } = useObligations();
   const { subscriptions } = useSubscriptions();
   const [obligationType, setObligationType] = useState<ObligationType>('debt');
+  const [obligationStatus, setObligationStatus] = useState<'open' | 'closed'>('open');
   const [counterparty, setCounterparty] = useState('');
   const [obligationAmount, setObligationAmount] = useState('0');
   const [obligationDueAt, setObligationDueAt] = useState(todayIsoDate());
-  const [paymentAmount, setPaymentAmount] = useState('0');
   const [subscriptionName, setSubscriptionName] = useState('');
   const [subscriptionAmount, setSubscriptionAmount] = useState('0');
   const [subscriptionFrequency, setSubscriptionFrequency] = useState<SubscriptionFrequency>('monthly');
@@ -92,6 +91,7 @@ export function MoreScreen() {
         counterparty,
         amount: parsedAmount,
         dueAt: obligationDueAt,
+        status: obligationStatus,
       });
     } else {
       createObligation(database, {
@@ -99,33 +99,16 @@ export function MoreScreen() {
         counterparty,
         amount: parsedAmount,
         dueAt: obligationDueAt,
+        status: obligationStatus,
       });
     }
 
     setCounterparty('');
     setObligationAmount('0');
     setObligationDueAt(todayIsoDate());
+    setObligationStatus('open');
     setEditingObligationId(null);
     setFeedback(editingObligationId ? 'Debito o credito aggiornato correttamente.' : 'Debito o credito salvato correttamente.');
-    refreshData();
-  };
-
-  const addPayment = (obligationId: string) => {
-    const parsedAmount = Number.parseFloat(paymentAmount.replace(',', '.'));
-
-    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      setFeedback('Il pagamento parziale deve essere maggiore di zero.');
-      return;
-    }
-
-    registerObligationPayment(database, {
-      obligationId,
-      amount: parsedAmount,
-      paidAt: todayIsoDate(),
-    });
-
-    setPaymentAmount('0');
-    setFeedback('Pagamento o incasso parziale registrato.');
     refreshData();
   };
 
@@ -209,6 +192,7 @@ export function MoreScreen() {
 
     setEditingObligationId(obligation.id);
     setObligationType(obligation.type);
+    setObligationStatus(obligation.status);
     setCounterparty(obligation.counterparty);
     setObligationAmount(String(obligation.amount));
     setObligationDueAt(obligation.dueAt);
@@ -218,6 +202,7 @@ export function MoreScreen() {
   const clearObligationForm = () => {
     setEditingObligationId(null);
     setObligationType('debt');
+    setObligationStatus('open');
     setCounterparty('');
     setObligationAmount('0');
     setObligationDueAt(todayIsoDate());
@@ -265,9 +250,18 @@ export function MoreScreen() {
     >
       <SectionCard
         title={editingObligationId ? 'Modifica debito o credito' : 'Nuovo debito o credito'}
-        description="Registra somme da pagare o da ricevere, con data di scadenza e stato aggiornabile tramite pagamenti parziali."
+        description="Registra somme da pagare o da ricevere, con scadenza e stato semplice aperta o chiusa."
       >
         <ChoiceChips label="Tipo" onSelect={setObligationType} options={obligationTypeOptions} selectedValue={obligationType} />
+        <ChoiceChips
+          label="Stato"
+          onSelect={(value) => setObligationStatus(value as 'open' | 'closed')}
+          options={[
+            { label: 'Aperta', value: 'open' },
+            { label: 'Chiusa', value: 'closed' },
+          ]}
+          selectedValue={obligationStatus}
+        />
         <TextField label="Controparte" onChangeText={setCounterparty} placeholder="Es. Marco Rossi" value={counterparty} />
         <TextField label="Importo" keyboardType="numeric" onChangeText={setObligationAmount} placeholder="0,00" value={obligationAmount} />
         <TextField label="Scadenza" onChangeText={setObligationDueAt} placeholder="YYYY-MM-DD" value={obligationDueAt} />
@@ -280,15 +274,8 @@ export function MoreScreen() {
 
       <SectionCard
         title="Elenco debiti e crediti"
-        description="Ogni voce mostra residuo e stato. Il pagamento parziale usa l'importo inserito nel campo dedicato qui sotto."
+        description="Ogni voce mostra importo totale, scadenza e stato corrente."
       >
-        <TextField
-          label="Importo pagamento parziale"
-          keyboardType="numeric"
-          onChangeText={setPaymentAmount}
-          placeholder="0,00"
-          value={paymentAmount}
-        />
         {obligations.length > 0 ? (
           obligations.map((item) => (
             <View key={item.id} style={styles.moduleCard}>
@@ -299,16 +286,12 @@ export function MoreScreen() {
                     {formatObligationType(item.type)} · Scade il {formatDate(item.dueAt)} · Stato {item.status}
                   </Text>
                 </View>
-                <Text style={styles.moduleAmount}>{formatCurrency(item.remainingAmount)}</Text>
+                <Text style={styles.moduleAmount}>{formatCurrency(item.amount)}</Text>
               </View>
-              <Text style={styles.moduleSubtle}>Totale {formatCurrency(item.amount)} · Incassato/pagato {formatCurrency(item.paidAmount)}</Text>
               <View style={styles.rowActions}>
                 <Pressable onPress={() => startEditingObligation(item.id)} style={styles.inlineAction}>
                   <Text style={styles.inlineActionLabel}>Modifica</Text>
                 </Pressable>
-                {item.status !== 'closed' ? (
-                  <PrimaryButton label="Registra parziale" onPress={() => addPayment(item.id)} tone="secondary" />
-                ) : null}
                 <Pressable onPress={() => handleDeleteObligation(item.id)} style={styles.inlineDangerAction}>
                   <Text style={styles.inlineDangerLabel}>Elimina</Text>
                 </Pressable>

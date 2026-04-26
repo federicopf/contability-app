@@ -54,15 +54,6 @@ export function initializeDatabase() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
-    CREATE TABLE IF NOT EXISTS obligation_payments (
-      id TEXT PRIMARY KEY NOT NULL,
-      obligation_id TEXT NOT NULL,
-      amount REAL NOT NULL,
-      paid_at TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (obligation_id) REFERENCES obligations (id)
-    );
-
     CREATE TABLE IF NOT EXISTS subscriptions (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
@@ -100,16 +91,16 @@ function seedStarterAccounts(db: SQLite.SQLiteDatabase) {
     return;
   }
 
-  const starterAccounts: Array<{ name: string; type: AccountType; openingBalance: number }> = [
-    { name: 'Portafoglio', type: 'cash', openingBalance: 180 },
-    { name: 'Carta principale', type: 'card', openingBalance: 2340 },
-    { name: 'Conto corrente', type: 'bank', openingBalance: 8920 },
+  const starterAccounts: Array<{ name: string; type: AccountType }> = [
+    { name: 'Portafoglio', type: 'cash' },
+    { name: 'Carta principale', type: 'card' },
+    { name: 'Conto corrente', type: 'bank' },
   ];
 
   starterAccounts.forEach((account, index) => {
     db.runSync(
       'INSERT INTO accounts (id, name, type, opening_balance, currency) VALUES (?, ?, ?, ?, ?)',
-      [`starter-account-${index + 1}`, account.name, account.type, account.openingBalance, 'EUR'],
+      [`starter-account-${index + 1}`, account.name, account.type, 0, 'EUR'],
     );
   });
 }

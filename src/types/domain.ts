@@ -10,7 +10,6 @@ export type Account = {
   id: string;
   name: string;
   type: AccountType;
-  openingBalance: number;
   currency: 'EUR';
 };
 
@@ -30,8 +29,7 @@ export type Obligation = {
   counterparty: string;
   amount: number;
   dueAt: string;
-  status: 'open' | 'partial' | 'closed';
-  paidAmount: number;
+  status: 'open' | 'closed';
 };
 
 export type Subscription = {

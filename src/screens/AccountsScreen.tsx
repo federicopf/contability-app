@@ -26,7 +26,6 @@ export function AccountsScreen() {
   const { database, refreshData } = useDatabase();
   const { accounts } = useAccounts();
   const [name, setName] = useState('');
-  const [openingBalance, setOpeningBalance] = useState('0');
   const [type, setType] = useState<AccountType>('cash');
   const [feedback, setFeedback] = useState('');
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
@@ -41,15 +40,8 @@ export function AccountsScreen() {
     .filter((item) => item.total !== 0);
 
   const saveAccount = () => {
-    const parsedOpeningBalance = Number.parseFloat(openingBalance.replace(',', '.'));
-
     if (!name.trim()) {
       setFeedback('Inserisci un nome conto prima di salvare.');
-      return;
-    }
-
-    if (Number.isNaN(parsedOpeningBalance)) {
-      setFeedback('Il saldo iniziale deve essere un numero valido.');
       return;
     }
 
@@ -58,18 +50,15 @@ export function AccountsScreen() {
         id: editingAccountId,
         name,
         type,
-        openingBalance: parsedOpeningBalance,
       });
     } else {
       createAccount(database, {
         name,
         type,
-        openingBalance: parsedOpeningBalance,
       });
     }
 
     setName('');
-    setOpeningBalance('0');
     setType('cash');
     setEditingAccountId(null);
     setFeedback(editingAccountId ? 'Conto aggiornato correttamente.' : 'Conto salvato nel database locale.');
@@ -85,7 +74,6 @@ export function AccountsScreen() {
 
     setEditingAccountId(account.id);
     setName(account.name);
-    setOpeningBalance(String(account.openingBalance));
     setType(account.type);
     setFeedback('Modifica il conto e salva per aggiornare i dati.');
   };
@@ -96,7 +84,6 @@ export function AccountsScreen() {
       if (editingAccountId === accountId) {
         setEditingAccountId(null);
         setName('');
-        setOpeningBalance('0');
         setType('cash');
       }
       setFeedback('Conto eliminato.');
@@ -109,7 +96,6 @@ export function AccountsScreen() {
   const cancelEditing = () => {
     setEditingAccountId(null);
     setName('');
-    setOpeningBalance('0');
     setType('cash');
     setFeedback('');
   };
@@ -133,7 +119,7 @@ export function AccountsScreen() {
           <View style={styles.accountText}>
             <Text style={styles.accountLabel}>{account.name}</Text>
             <Text style={styles.accountDetail}>
-              {formatAccountType(account.type)} · Saldo iniziale {formatCurrency(account.openingBalance)}
+              {formatAccountType(account.type)}
             </Text>
           </View>
           <View style={styles.accountAside}>
@@ -166,16 +152,9 @@ export function AccountsScreen() {
 
       <SectionCard
         title={editingAccountId ? 'Modifica conto' : 'Aggiungi un conto'}
-        description="I saldi correnti restano derivati da saldo iniziale e movimenti registrati. I conti con storico collegato non possono essere eliminati per evitare incoerenze."
+        description="Il saldo del conto deriva solo dai movimenti registrati. I conti con storico collegato non possono essere eliminati per evitare incoerenze."
       >
         <TextField label="Nome conto" onChangeText={setName} placeholder="Es. Carta viaggi" value={name} />
-        <TextField
-          label="Saldo iniziale"
-          keyboardType="numeric"
-          onChangeText={setOpeningBalance}
-          placeholder="0,00"
-          value={openingBalance}
-        />
         <ChoiceChips label="Tipologia" onSelect={setType} options={accountTypeOptions} selectedValue={type} />
         <PrimaryButton label={editingAccountId ? 'Aggiorna conto' : 'Salva conto'} onPress={saveAccount} />
         {editingAccountId ? <PrimaryButton label="Annulla modifica" onPress={cancelEditing} tone="secondary" /> : null}

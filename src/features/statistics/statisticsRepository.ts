@@ -61,7 +61,7 @@ function readSummary(database: SQLite.SQLiteDatabase, startDate: string, endDate
         COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) as expense,
         COUNT(*) as transactions_count
       FROM ledger_transactions
-      WHERE booked_at >= ? AND booked_at <= ?
+      WHERE booked_at >= ? AND booked_at <= ? AND type != 'transfer'
     `,
     [startDate, endDate],
   );
@@ -100,7 +100,7 @@ function readAccountBalances(database: SQLite.SQLiteDatabase): AccountBreakdownI
   const rows = database.getAllSync<AccountRow>(`
     SELECT
       a.name as account_name,
-      a.opening_balance + COALESCE(SUM(
+      COALESCE(SUM(
         CASE
           WHEN t.type = 'income' THEN t.amount
           WHEN t.type = 'expense' THEN -t.amount
@@ -109,7 +109,7 @@ function readAccountBalances(database: SQLite.SQLiteDatabase): AccountBreakdownI
       ), 0) as balance
     FROM accounts a
     LEFT JOIN ledger_transactions t ON t.account_id = a.id
-    GROUP BY a.id, a.name, a.opening_balance
+    GROUP BY a.id, a.name
     ORDER BY balance DESC, a.name ASC
   `);
 

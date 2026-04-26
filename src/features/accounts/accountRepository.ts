@@ -11,7 +11,6 @@ type AccountRow = {
   id: string;
   name: string;
   type: AccountType;
-  opening_balance: number;
   currency: 'EUR';
   current_balance: number;
 };
@@ -22,9 +21,8 @@ export function listAccounts(database: SQLite.SQLiteDatabase): AccountListItem[]
       a.id,
       a.name,
       a.type,
-      a.opening_balance,
       a.currency,
-      a.opening_balance + COALESCE(SUM(
+      COALESCE(SUM(
         CASE
           WHEN t.type = 'income' THEN t.amount
           WHEN t.type = 'expense' THEN -t.amount
@@ -33,7 +31,7 @@ export function listAccounts(database: SQLite.SQLiteDatabase): AccountListItem[]
       ), 0) as current_balance
     FROM accounts a
     LEFT JOIN ledger_transactions t ON t.account_id = a.id
-    GROUP BY a.id, a.name, a.type, a.opening_balance, a.currency
+    GROUP BY a.id, a.name, a.type, a.currency
     ORDER BY CASE a.type
       WHEN 'cash' THEN 1
       WHEN 'card' THEN 2
@@ -47,7 +45,6 @@ export function listAccounts(database: SQLite.SQLiteDatabase): AccountListItem[]
     id: row.id,
     name: row.name,
     type: row.type,
-    openingBalance: row.opening_balance,
     currency: row.currency,
     currentBalance: row.current_balance,
   }));
@@ -55,24 +52,19 @@ export function listAccounts(database: SQLite.SQLiteDatabase): AccountListItem[]
 
 export function createAccount(
   database: SQLite.SQLiteDatabase,
-  input: { name: string; type: AccountType; openingBalance: number },
+  input: { name: string; type: AccountType },
 ) {
   database.runSync(
     'INSERT INTO accounts (id, name, type, opening_balance, currency) VALUES (?, ?, ?, ?, ?)',
-    [generateId('account'), input.name.trim(), input.type, input.openingBalance, 'EUR'],
+    [generateId('account'), input.name.trim(), input.type, 0, 'EUR'],
   );
 }
 
 export function updateAccount(
   database: SQLite.SQLiteDatabase,
-  input: { id: string; name: string; type: AccountType; openingBalance: number },
+  input: { id: string; name: string; type: AccountType },
 ) {
-  database.runSync('UPDATE accounts SET name = ?, type = ?, opening_balance = ? WHERE id = ?', [
-    input.name.trim(),
-    input.type,
-    input.openingBalance,
-    input.id,
-  ]);
+  database.runSync('UPDATE accounts SET name = ?, type = ? WHERE id = ?', [input.name.trim(), input.type, input.id]);
 }
 
 export function deleteAccount(database: SQLite.SQLiteDatabase, input: { id: string }) {
