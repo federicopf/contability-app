@@ -10,6 +10,14 @@ import { TextField } from '../components/TextField';
 import { useDatabase } from '../db/DatabaseProvider';
 import { useAccounts } from '../features/accounts/useAccounts';
 import {
+  createInstallment,
+  deleteInstallment,
+  registerInstallmentPayment,
+  toggleInstallmentActive,
+  updateInstallment,
+} from '../features/installments/installmentRepository';
+import { useInstallments } from '../features/installments/useInstallments';
+import {
   createObligation,
   deleteObligation,
   updateObligation,
@@ -48,6 +56,7 @@ const subscriptionFrequencyOptions: Array<{ label: string; value: SubscriptionFr
 export function MoreScreen() {
   const { database, refreshData } = useDatabase();
   const { accounts } = useAccounts();
+  const { installments } = useInstallments();
   const { obligations } = useObligations();
   const { subscriptions } = useSubscriptions();
   const [obligationType, setObligationType] = useState<ObligationType>('debt');
@@ -60,16 +69,25 @@ export function MoreScreen() {
   const [subscriptionFrequency, setSubscriptionFrequency] = useState<SubscriptionFrequency>('monthly');
   const [nextBillingDate, setNextBillingDate] = useState(todayIsoDate());
   const [subscriptionAccountId, setSubscriptionAccountId] = useState(accounts[0]?.id ?? '');
+  const [installmentName, setInstallmentName] = useState('');
+  const [installmentAmount, setInstallmentAmount] = useState('0');
+  const [installmentCount, setInstallmentCount] = useState('12');
+  const [installmentNextDueDate, setInstallmentNextDueDate] = useState(todayIsoDate());
+  const [installmentAccountId, setInstallmentAccountId] = useState(accounts[0]?.id ?? '');
   const [feedback, setFeedback] = useState('');
   const [editingObligationId, setEditingObligationId] = useState<string | null>(null);
   const [editingSubscriptionId, setEditingSubscriptionId] = useState<string | null>(null);
+  const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
 
   const accountOptions = useMemo(
     () => accounts.map((account) => ({ label: account.name, value: account.id })),
     [accounts],
   );
 
-  const activeItemsCount = obligations.filter((item) => item.status !== 'closed').length + subscriptions.filter((item) => item.active).length;
+  const activeItemsCount =
+    obligations.filter((item) => item.status !== 'closed').length +
+    subscriptions.filter((item) => item.active).length +
+    installments.filter((item) => item.active).length;
 
   const saveObligation = () => {
     const parsedAmount = Number.parseFloat(obligationAmount.replace(',', '.'));
@@ -153,6 +171,49 @@ export function MoreScreen() {
     refreshData();
   };
 
+  const saveInstallment = () => {
+    const parsedAmount = Number.parseFloat(installmentAmount.replace(',', '.'));
+    const parsedCount = Number.parseInt(installmentCount, 10);
+
+    if (!installmentName.trim()) {
+      setFeedback('Inserisci un nome per il piano rateale.');
+      return;
+    }
+
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setFeedback('L\'importo rata deve essere valido.');
+      return;
+    }
+
+    if (!Number.isInteger(parsedCount) || parsedCount <= 0) {
+      setFeedback('Il numero totale di rate deve essere un intero maggiore di zero.');
+      return;
+    }
+
+    if (editingInstallmentId) {
+      updateInstallment(database, {
+        installmentId: editingInstallmentId,
+        name: installmentName,
+        installmentAmount: parsedAmount,
+        totalInstallments: parsedCount,
+        nextDueDate: installmentNextDueDate,
+        accountId: installmentAccountId || undefined,
+      });
+    } else {
+      createInstallment(database, {
+        name: installmentName,
+        installmentAmount: parsedAmount,
+        totalInstallments: parsedCount,
+        nextDueDate: installmentNextDueDate,
+        accountId: installmentAccountId || undefined,
+      });
+    }
+
+    clearInstallmentForm();
+    setFeedback(editingInstallmentId ? 'Piano rateale aggiornato correttamente.' : 'Piano rateale registrato correttamente.');
+    refreshData();
+  };
+
   const handleRenewSubscription = (subscriptionId: string) => {
     renewSubscription(database, { subscriptionId });
     setFeedback('Rinnovo registrato e prossima scadenza aggiornata.');
@@ -180,6 +241,27 @@ export function MoreScreen() {
       clearSubscriptionForm();
     }
     setFeedback('Abbonamento eliminato.');
+    refreshData();
+  };
+
+  const handleMarkInstallmentPaid = (installmentId: string) => {
+    registerInstallmentPayment(database, { installmentId });
+    setFeedback('Rata registrata correttamente.');
+    refreshData();
+  };
+
+  const handleToggleInstallment = (installmentId: string, active: boolean) => {
+    toggleInstallmentActive(database, { installmentId, active: !active });
+    setFeedback(active ? 'Piano rateale messo in pausa.' : 'Piano rateale riattivato.');
+    refreshData();
+  };
+
+  const handleDeleteInstallment = (installmentId: string) => {
+    deleteInstallment(database, { installmentId });
+    if (editingInstallmentId === installmentId) {
+      clearInstallmentForm();
+    }
+    setFeedback('Piano rateale eliminato.');
     refreshData();
   };
 
@@ -233,6 +315,31 @@ export function MoreScreen() {
     setNextBillingDate(todayIsoDate());
     setSubscriptionAccountId(accounts[0]?.id ?? '');
     setFeedback('');
+  };
+
+  const startEditingInstallment = (installmentId: string) => {
+    const installment = installments.find((item) => item.id === installmentId);
+
+    if (!installment) {
+      return;
+    }
+
+    setEditingInstallmentId(installment.id);
+    setInstallmentName(installment.name);
+    setInstallmentAmount(String(installment.installmentAmount));
+    setInstallmentCount(String(installment.totalInstallments));
+    setInstallmentNextDueDate(installment.nextDueDate);
+    setInstallmentAccountId(installment.accountId ?? '');
+    setFeedback('Modifica il piano rateale e salva per aggiornare i dati.');
+  };
+
+  const clearInstallmentForm = () => {
+    setEditingInstallmentId(null);
+    setInstallmentName('');
+    setInstallmentAmount('0');
+    setInstallmentCount('12');
+    setInstallmentNextDueDate(todayIsoDate());
+    setInstallmentAccountId(accounts[0]?.id ?? '');
   };
 
   return (
@@ -361,6 +468,88 @@ export function MoreScreen() {
           ))
         ) : (
           <Text style={styles.moduleText}>Nessun abbonamento registrato per ora.</Text>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title={editingInstallmentId ? 'Modifica piano rateale' : 'Nuovo piano rateale'}
+        description="Gestisci acquisti a rate con numero totale rate e avanzamento automatico mensile."
+      >
+        <TextField label="Nome" onChangeText={setInstallmentName} placeholder="Es. iPhone 15" value={installmentName} />
+        <TextField
+          label="Importo rata"
+          keyboardType="numeric"
+          onChangeText={setInstallmentAmount}
+          placeholder="0,00"
+          value={installmentAmount}
+        />
+        <TextField
+          label="Numero totale rate"
+          keyboardType="numeric"
+          onChangeText={setInstallmentCount}
+          placeholder="12"
+          value={installmentCount}
+        />
+        <TextField
+          label="Prossima scadenza"
+          onChangeText={setInstallmentNextDueDate}
+          placeholder="YYYY-MM-DD"
+          value={installmentNextDueDate}
+        />
+        {accountOptions.length > 0 ? (
+          <ChoiceChips
+            label="Conto associato"
+            onSelect={setInstallmentAccountId}
+            options={accountOptions}
+            selectedValue={installmentAccountId}
+          />
+        ) : null}
+        <PrimaryButton label={editingInstallmentId ? 'Aggiorna piano rateale' : 'Salva piano rateale'} onPress={saveInstallment} />
+        {editingInstallmentId ? (
+          <PrimaryButton label="Annulla modifica" onPress={clearInstallmentForm} tone="secondary" />
+        ) : null}
+      </SectionCard>
+
+      <SectionCard
+        title="Piani rateali"
+        description="Ogni rinnovo registra una rata, avanza la prossima scadenza e aggiorna il progresso."
+      >
+        {installments.length > 0 ? (
+          installments.map((item) => (
+            <View key={item.id} style={styles.moduleCard}>
+              <View style={styles.moduleHeaderRow}>
+                <View style={styles.moduleTextWrap}>
+                  <Text style={styles.moduleTitle}>{item.name}</Text>
+                  <Text style={styles.moduleText}>
+                    Rata {Math.min(item.paidInstallments + 1, item.totalInstallments)}/{item.totalInstallments} · Prossima data{' '}
+                    {formatDate(item.nextDueDate)}
+                  </Text>
+                </View>
+                <Text style={styles.moduleAmount}>{formatCurrency(item.installmentAmount)}</Text>
+              </View>
+              <Text style={styles.moduleSubtle}>
+                Residue: {item.remainingInstallments} · Conto associato: {item.accountName ?? 'Nessuno'}
+              </Text>
+              <View style={styles.rowActions}>
+                <Pressable onPress={() => startEditingInstallment(item.id)} style={styles.inlineAction}>
+                  <Text style={styles.inlineActionLabel}>Modifica</Text>
+                </Pressable>
+                {item.active && item.remainingInstallments > 0 ? (
+                  <PrimaryButton label="Segna rata" onPress={() => handleMarkInstallmentPaid(item.id)} tone="secondary" />
+                ) : null}
+                {item.remainingInstallments > 0 ? (
+                  <Pressable onPress={() => handleToggleInstallment(item.id, item.active)} style={styles.inlineAction}>
+                    <Text style={styles.inlineActionLabel}>{item.active ? 'Pausa' : 'Riattiva'}</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable onPress={() => handleDeleteInstallment(item.id)} style={styles.inlineDangerAction}>
+                  <Text style={styles.inlineDangerLabel}>Elimina</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.moduleText}>Nessun piano rateale registrato per ora.</Text>
         )}
       </SectionCard>
 

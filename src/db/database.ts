@@ -65,6 +65,19 @@ export function initializeDatabase() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (account_id) REFERENCES accounts (id)
     );
+
+    CREATE TABLE IF NOT EXISTS installment_plans (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      installment_amount REAL NOT NULL,
+      total_installments INTEGER NOT NULL,
+      paid_installments INTEGER NOT NULL DEFAULT 0,
+      next_due_date TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      account_id TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (account_id) REFERENCES accounts (id)
+    );
   `);
 
   ensureColumn(db, 'obligations', 'paid_amount', 'REAL NOT NULL DEFAULT 0');

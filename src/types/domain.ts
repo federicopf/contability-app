@@ -41,3 +41,14 @@ export type Subscription = {
   active: boolean;
   accountId?: string | null;
 };
+
+export type InstallmentPlan = {
+  id: string;
+  name: string;
+  installmentAmount: number;
+  totalInstallments: number;
+  paidInstallments: number;
+  nextDueDate: string;
+  active: boolean;
+  accountId?: string | null;
+};
