@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen } from '../components/AppScreen';
@@ -10,9 +10,12 @@ import { TextField } from '../components/TextField';
 import { useDatabase } from '../db/DatabaseProvider';
 import { createAccount, deleteAccount, updateAccount } from '../features/accounts/accountRepository';
 import { useAccounts } from '../features/accounts/useAccounts';
+import { createTransaction, deleteTransaction } from '../features/transactions/transactionRepository';
+import { useTransactions } from '../features/transactions/useTransactions';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import type { AccountType } from '../types/domain';
-import { formatAccountType, formatCurrency } from '../utils/format';
+import { todayIsoDate } from '../utils/date';
+import { formatAccountType, formatCurrency, formatDate, formatTransactionType } from '../utils/format';
 
 const accountTypeOptions: Array<{ label: string; value: AccountType }> = [
   { label: 'Contanti', value: 'cash' },
@@ -25,8 +28,15 @@ const accountTypeOptions: Array<{ label: string; value: AccountType }> = [
 export function AccountsScreen() {
   const { database, refreshData } = useDatabase();
   const { accounts } = useAccounts();
+  const { transactions } = useTransactions();
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>('cash');
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [movementType, setMovementType] = useState<'income' | 'expense'>('expense');
+  const [movementAmount, setMovementAmount] = useState('0');
+  const [movementDescription, setMovementDescription] = useState('');
+  const [movementCategory, setMovementCategory] = useState('');
+  const [movementDate, setMovementDate] = useState(todayIsoDate());
   const [feedback, setFeedback] = useState('');
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const totalBalance = accounts.reduce((sum, account) => sum + account.currentBalance, 0);
@@ -38,6 +48,29 @@ export function AccountsScreen() {
         .reduce((sum, account) => sum + account.currentBalance, 0),
     }))
     .filter((item) => item.total !== 0);
+
+  useEffect(() => {
+    if (!selectedAccountId && accounts.length > 0) {
+      setSelectedAccountId(accounts[0].id);
+    }
+
+    if (selectedAccountId && !accounts.some((account) => account.id === selectedAccountId)) {
+      setSelectedAccountId(accounts[0]?.id ?? null);
+    }
+  }, [accounts, selectedAccountId]);
+
+  const selectedAccount = accounts.find((account) => account.id === selectedAccountId) ?? null;
+
+  const accountTransactions = useMemo(
+    () =>
+      transactions
+        .filter(
+          (transaction) =>
+            transaction.accountId === selectedAccountId && !transaction.transferGroupId && (transaction.type === 'income' || transaction.type === 'expense'),
+        )
+        .sort((a, b) => (a.bookedAt < b.bookedAt ? 1 : -1)),
+    [selectedAccountId, transactions],
+  );
 
   const saveAccount = () => {
     if (!name.trim()) {
@@ -100,6 +133,48 @@ export function AccountsScreen() {
     setFeedback('');
   };
 
+  const saveMovement = () => {
+    if (!selectedAccountId) {
+      setFeedback('Seleziona prima un conto.');
+      return;
+    }
+
+    const parsedAmount = Number.parseFloat(movementAmount.replace(',', '.'));
+
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setFeedback('L\'importo del movimento deve essere maggiore di zero.');
+      return;
+    }
+
+    if (!movementDescription.trim()) {
+      setFeedback('Inserisci una descrizione del movimento.');
+      return;
+    }
+
+    createTransaction(database, {
+      type: movementType,
+      amount: parsedAmount,
+      category: movementCategory,
+      description: movementDescription,
+      bookedAt: movementDate,
+      accountId: selectedAccountId,
+    });
+
+    setMovementType('expense');
+    setMovementAmount('0');
+    setMovementDescription('');
+    setMovementCategory('');
+    setMovementDate(todayIsoDate());
+    setFeedback('Movimento salvato sul conto.');
+    refreshData();
+  };
+
+  const removeMovement = (transactionId: string) => {
+    deleteTransaction(database, { id: transactionId });
+    setFeedback('Movimento eliminato dal conto.');
+    refreshData();
+  };
+
   return (
     <AppScreen
       eyebrow="Conti"
@@ -125,6 +200,9 @@ export function AccountsScreen() {
           <View style={styles.accountAside}>
             <Text style={styles.accountBalance}>{formatCurrency(account.currentBalance)}</Text>
             <View style={styles.actionRow}>
+              <Pressable onPress={() => setSelectedAccountId(account.id)} style={styles.inlineAction}>
+                <Text style={styles.inlineActionLabel}>Apri</Text>
+              </Pressable>
               <Pressable onPress={() => startEditing(account.id)} style={styles.inlineAction}>
                 <Text style={styles.inlineActionLabel}>Modifica</Text>
               </Pressable>
@@ -160,6 +238,60 @@ export function AccountsScreen() {
         {editingAccountId ? <PrimaryButton label="Annulla modifica" onPress={cancelEditing} tone="secondary" /> : null}
         {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
       </SectionCard>
+
+      {selectedAccount ? (
+        <SectionCard
+          title={`Gestione conto: ${selectedAccount.name}`}
+          description="Aggiungi rapidamente entrate e uscite direttamente nel conto selezionato."
+        >
+          <ChoiceChips
+            label="Tipo movimento"
+            onSelect={(value) => setMovementType(value as 'income' | 'expense')}
+            options={[
+              { label: 'Entrata', value: 'income' },
+              { label: 'Uscita', value: 'expense' },
+            ]}
+            selectedValue={movementType}
+          />
+          <TextField
+            label="Descrizione"
+            onChangeText={setMovementDescription}
+            placeholder="Es. Spesa supermercato"
+            value={movementDescription}
+          />
+          <TextField label="Categoria" onChangeText={setMovementCategory} placeholder="Es. Alimentari" value={movementCategory} />
+          <TextField
+            label="Importo"
+            keyboardType="numeric"
+            onChangeText={setMovementAmount}
+            placeholder="0,00"
+            value={movementAmount}
+          />
+          <TextField label="Data" onChangeText={setMovementDate} placeholder="YYYY-MM-DD" value={movementDate} />
+          <PrimaryButton label="Salva movimento" onPress={saveMovement} />
+
+          {accountTransactions.length > 0 ? (
+            accountTransactions.map((transaction) => (
+              <View key={transaction.id} style={styles.transactionRow}>
+                <View style={styles.accountText}>
+                  <Text style={styles.accountLabel}>{transaction.description}</Text>
+                  <Text style={styles.accountDetail}>
+                    {formatTransactionType(transaction.type)} · {formatDate(transaction.bookedAt)} · {transaction.category}
+                  </Text>
+                </View>
+                <View style={styles.accountAside}>
+                  <Text style={styles.accountBalance}>{formatCurrency(transaction.amount)}</Text>
+                  <Pressable onPress={() => removeMovement(transaction.id)} style={styles.inlineDangerAction}>
+                    <Text style={styles.inlineDangerLabel}>Elimina</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.accountDetail}>Nessun movimento registrato per questo conto.</Text>
+          )}
+        </SectionCard>
+      ) : null}
     </AppScreen>
   );
 }
@@ -250,5 +382,15 @@ const styles = StyleSheet.create({
     fontFamily: typography.bodyStrong,
     fontSize: 16,
     color: colors.textPrimary,
+  },
+  transactionRow: {
+    backgroundColor: colors.panelMuted,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
 });

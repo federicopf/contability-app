@@ -2,16 +2,14 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { AccountsScreen } from '../screens/AccountsScreen';
-import { MoreScreen } from '../screens/MoreScreen';
+import { RatesScreen } from '../screens/RatesScreen';
 import { StatisticsScreen } from '../screens/StatisticsScreen';
-import { TransactionsScreen } from '../screens/TransactionsScreen';
 import { colors, radius, typography } from '../theme/tokens';
 
 export type RootTabParamList = {
   Conti: undefined;
-  Movimenti: undefined;
+  Rate: undefined;
   Statistiche: undefined;
-  Altro: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -47,9 +45,8 @@ export function RootNavigator() {
       })}
     >
       <Tab.Screen name="Conti" component={AccountsScreen} />
-      <Tab.Screen name="Movimenti" component={TransactionsScreen} />
+      <Tab.Screen name="Rate" component={RatesScreen} />
       <Tab.Screen name="Statistiche" component={StatisticsScreen} />
-      <Tab.Screen name="Altro" component={MoreScreen} />
     </Tab.Navigator>
   );
 }
@@ -58,11 +55,9 @@ function getTabIcon(routeName: keyof RootTabParamList): keyof typeof MaterialIco
   switch (routeName) {
     case 'Conti':
       return 'account-balance-wallet';
-    case 'Movimenti':
-      return 'receipt-long';
+    case 'Rate':
+      return 'payments';
     case 'Statistiche':
       return 'query-stats';
-    case 'Altro':
-      return 'apps';
   }
 }

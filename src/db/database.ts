@@ -69,6 +69,7 @@ export function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS installment_plans (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
+      cashflow_type TEXT NOT NULL DEFAULT 'expense',
       installment_amount REAL NOT NULL,
       total_installments INTEGER NOT NULL,
       paid_installments INTEGER NOT NULL DEFAULT 0,
@@ -82,6 +83,7 @@ export function initializeDatabase() {
 
   ensureColumn(db, 'obligations', 'paid_amount', 'REAL NOT NULL DEFAULT 0');
   ensureColumn(db, 'ledger_transactions', 'transfer_group_id', 'TEXT');
+  ensureColumn(db, 'installment_plans', 'cashflow_type', "TEXT NOT NULL DEFAULT 'expense'");
 
   seedStarterAccounts(db);
 

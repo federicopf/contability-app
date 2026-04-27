@@ -45,6 +45,7 @@ export type Subscription = {
 export type InstallmentPlan = {
   id: string;
   name: string;
+  cashflowType: 'income' | 'expense';
   installmentAmount: number;
   totalInstallments: number;
   paidInstallments: number;

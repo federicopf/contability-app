@@ -6,6 +6,7 @@ import { generateId } from '../../utils/id';
 type InstallmentRow = {
   id: string;
   name: string;
+  cashflow_type: 'income' | 'expense';
   installment_amount: number;
   total_installments: number;
   paid_installments: number;
@@ -25,6 +26,7 @@ export function listInstallments(database: SQLite.SQLiteDatabase): InstallmentLi
     SELECT
       p.id,
       p.name,
+      p.cashflow_type,
       p.installment_amount,
       p.total_installments,
       p.paid_installments,
@@ -40,6 +42,7 @@ export function listInstallments(database: SQLite.SQLiteDatabase): InstallmentLi
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
+    cashflowType: row.cashflow_type,
     installmentAmount: row.installment_amount,
     totalInstallments: row.total_installments,
     paidInstallments: row.paid_installments,
@@ -55,6 +58,7 @@ export function createInstallment(
   database: SQLite.SQLiteDatabase,
   input: {
     name: string;
+    cashflowType: 'income' | 'expense';
     installmentAmount: number;
     totalInstallments: number;
     nextDueDate: string;
@@ -63,11 +67,12 @@ export function createInstallment(
 ) {
   database.runSync(
     `INSERT INTO installment_plans
-      (id, name, installment_amount, total_installments, paid_installments, next_due_date, active, account_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, name, cashflow_type, installment_amount, total_installments, paid_installments, next_due_date, active, account_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       generateId('installment'),
       input.name.trim(),
+      input.cashflowType,
       input.installmentAmount,
       input.totalInstallments,
       0,
@@ -83,6 +88,7 @@ export function updateInstallment(
   input: {
     installmentId: string;
     name: string;
+    cashflowType: 'income' | 'expense';
     installmentAmount: number;
     totalInstallments: number;
     nextDueDate: string;
@@ -99,10 +105,11 @@ export function updateInstallment(
 
   database.runSync(
     `UPDATE installment_plans
-     SET name = ?, installment_amount = ?, total_installments = ?, paid_installments = ?, next_due_date = ?, active = ?, account_id = ?
+     SET name = ?, cashflow_type = ?, installment_amount = ?, total_installments = ?, paid_installments = ?, next_due_date = ?, active = ?, account_id = ?
      WHERE id = ?`,
     [
       input.name.trim(),
+      input.cashflowType,
       input.installmentAmount,
       input.totalInstallments,
       paidInstallments,
@@ -117,14 +124,18 @@ export function updateInstallment(
 export function registerInstallmentPayment(database: SQLite.SQLiteDatabase, input: { installmentId: string }) {
   const installment = database.getFirstSync<{
     name: string;
+    cashflow_type: 'income' | 'expense';
     installment_amount: number;
     total_installments: number;
     paid_installments: number;
     next_due_date: string;
     account_id: string | null;
-  }>('SELECT name, installment_amount, total_installments, paid_installments, next_due_date, account_id FROM installment_plans WHERE id = ?', [
+  }>(
+    'SELECT name, cashflow_type, installment_amount, total_installments, paid_installments, next_due_date, account_id FROM installment_plans WHERE id = ?',
+    [
     input.installmentId,
-  ]);
+    ],
+  );
 
   if (!installment || installment.paid_installments >= installment.total_installments) {
     return;
@@ -148,7 +159,7 @@ export function registerInstallmentPayment(database: SQLite.SQLiteDatabase, inpu
         [
           generateId('transaction'),
           installment.account_id,
-          'expense',
+          installment.cashflow_type,
           installment.installment_amount,
           'Rate',
           `${installment.name} (${nextPaidInstallments}/${installment.total_installments})`,
