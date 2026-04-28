@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { AccountsScreen } from '../screens/AccountsScreen';
+import { PersonalEventsScreen } from '../screens/PersonalEventsScreen';
 import { RatesScreen } from '../screens/RatesScreen';
 import { StatisticsScreen } from '../screens/StatisticsScreen';
 import { colors, radius, typography } from '../theme/tokens';
@@ -9,6 +10,7 @@ import { colors, radius, typography } from '../theme/tokens';
 export type RootTabParamList = {
   Conti: undefined;
   Rate: undefined;
+  Eventi: undefined;
   Statistiche: undefined;
 };
 
@@ -46,6 +48,7 @@ export function RootNavigator() {
     >
       <Tab.Screen name="Conti" component={AccountsScreen} />
       <Tab.Screen name="Rate" component={RatesScreen} />
+      <Tab.Screen name="Eventi" component={PersonalEventsScreen} />
       <Tab.Screen name="Statistiche" component={StatisticsScreen} />
     </Tab.Navigator>
   );
@@ -57,6 +60,8 @@ function getTabIcon(routeName: keyof RootTabParamList): keyof typeof MaterialIco
       return 'account-balance-wallet';
     case 'Rate':
       return 'payments';
+    case 'Eventi':
+      return 'event-note';
     case 'Statistiche':
       return 'query-stats';
   }

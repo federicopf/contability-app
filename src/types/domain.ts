@@ -53,3 +53,13 @@ export type InstallmentPlan = {
   active: boolean;
   accountId?: string | null;
 };
+
+export type PersonalEconomicEvent = {
+  id: string;
+  title: string;
+  cashflowType: 'income' | 'expense';
+  recurrence: 'none' | 'monthly';
+  dueAt: string;
+  status: 'todo' | 'done';
+  note?: string | null;
+};

@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 import { AppScreen } from '../components/AppScreen';
-import { ChoiceChips } from '../components/ChoiceChips';
-import { InfoCard } from '../components/InfoCard';
-import { PrimaryButton } from '../components/PrimaryButton';
-import { SectionCard } from '../components/SectionCard';
-import { TextField } from '../components/TextField';
 import { useDatabase } from '../db/DatabaseProvider';
 import { createAccount, deleteAccount, updateAccount } from '../features/accounts/accountRepository';
 import { useAccounts } from '../features/accounts/useAccounts';
@@ -15,7 +11,15 @@ import { useTransactions } from '../features/transactions/useTransactions';
 import { colors, radius, spacing, typography } from '../theme/tokens';
 import type { AccountType } from '../types/domain';
 import { todayIsoDate } from '../utils/date';
-import { formatAccountType, formatCurrency, formatDate, formatTransactionType } from '../utils/format';
+import { formatCurrency, formatDate } from '../utils/format';
+
+const TYPE_LABELS: Record<AccountType, string> = {
+  cash: 'Contanti',
+  card: 'Carta',
+  bank: 'Banca',
+  wallet: 'Wallet',
+  other: 'Altro',
+};
 
 const accountTypeOptions: Array<{ label: string; value: AccountType }> = [
   { label: 'Contanti', value: 'cash' },
@@ -29,368 +33,472 @@ export function AccountsScreen() {
   const { database, refreshData } = useDatabase();
   const { accounts } = useAccounts();
   const { transactions } = useTransactions();
-  const [name, setName] = useState('');
-  const [type, setType] = useState<AccountType>('cash');
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [movementType, setMovementType] = useState<'income' | 'expense'>('expense');
-  const [movementAmount, setMovementAmount] = useState('0');
-  const [movementDescription, setMovementDescription] = useState('');
-  const [movementCategory, setMovementCategory] = useState('');
-  const [movementDate, setMovementDate] = useState(todayIsoDate());
-  const [feedback, setFeedback] = useState('');
-  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-  const totalBalance = accounts.reduce((sum, account) => sum + account.currentBalance, 0);
-  const groupedBalances = accountTypeOptions
-    .map((option) => ({
-      label: option.label,
-      total: accounts
-        .filter((account) => account.type === option.value)
-        .reduce((sum, account) => sum + account.currentBalance, 0),
-    }))
-    .filter((item) => item.total !== 0);
 
-  useEffect(() => {
-    if (!selectedAccountId && accounts.length > 0) {
-      setSelectedAccountId(accounts[0].id);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  const [accountName, setAccountName] = useState('');
+  const [accountType, setAccountType] = useState<AccountType>('cash');
+
+  const [movType, setMovType] = useState<'income' | 'expense'>('expense');
+  const [movAmount, setMovAmount] = useState('');
+  const [movDesc, setMovDesc] = useState('');
+  const [movDate, setMovDate] = useState(todayIsoDate());
+
+  const totalBalance = accounts.reduce((sum, a) => sum + a.currentBalance, 0);
+
+  const txByAccount = useMemo(() => {
+    const map: Record<string, typeof transactions> = {};
+    for (const tx of transactions) {
+      if (!tx.transferGroupId && (tx.type === 'income' || tx.type === 'expense')) {
+        (map[tx.accountId] ??= []).push(tx);
+      }
     }
+    return map;
+  }, [transactions]);
 
-    if (selectedAccountId && !accounts.some((account) => account.id === selectedAccountId)) {
-      setSelectedAccountId(accounts[0]?.id ?? null);
-    }
-  }, [accounts, selectedAccountId]);
-
-  const selectedAccount = accounts.find((account) => account.id === selectedAccountId) ?? null;
-
-  const accountTransactions = useMemo(
-    () =>
-      transactions
-        .filter(
-          (transaction) =>
-            transaction.accountId === selectedAccountId && !transaction.transferGroupId && (transaction.type === 'income' || transaction.type === 'expense'),
-        )
-        .sort((a, b) => (a.bookedAt < b.bookedAt ? 1 : -1)),
-    [selectedAccountId, transactions],
-  );
+  const toggle = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
 
   const saveAccount = () => {
-    if (!name.trim()) {
-      setFeedback('Inserisci un nome conto prima di salvare.');
-      return;
-    }
-
-    if (editingAccountId) {
-      updateAccount(database, {
-        id: editingAccountId,
-        name,
-        type,
-      });
+    if (!accountName.trim()) return;
+    if (editingId) {
+      updateAccount(database, { id: editingId, name: accountName, type: accountType });
     } else {
-      createAccount(database, {
-        name,
-        type,
-      });
+      createAccount(database, { name: accountName, type: accountType });
     }
-
-    setName('');
-    setType('cash');
-    setEditingAccountId(null);
-    setFeedback(editingAccountId ? 'Conto aggiornato correttamente.' : 'Conto salvato nel database locale.');
+    clearForm();
     refreshData();
+    setShowAddForm(false);
   };
 
-  const startEditing = (accountId: string) => {
-    const account = accounts.find((item) => item.id === accountId);
-
-    if (!account) {
-      return;
-    }
-
-    setEditingAccountId(account.id);
-    setName(account.name);
-    setType(account.type);
-    setFeedback('Modifica il conto e salva per aggiornare i dati.');
+  const startEdit = (id: string) => {
+    const a = accounts.find((x) => x.id === id);
+    if (!a) return;
+    setEditingId(a.id);
+    setAccountName(a.name);
+    setAccountType(a.type);
+    setShowAddForm(true);
   };
 
-  const handleDeleteAccount = (accountId: string) => {
+  const cancelEdit = () => {
+    clearForm();
+    setShowAddForm(false);
+  };
+
+  const clearForm = () => {
+    setEditingId(null);
+    setAccountName('');
+    setAccountType('cash');
+  };
+
+  const removeAccount = (id: string) => {
     try {
-      deleteAccount(database, { id: accountId });
-      if (editingAccountId === accountId) {
-        setEditingAccountId(null);
-        setName('');
-        setType('cash');
-      }
-      setFeedback('Conto eliminato.');
+      deleteAccount(database, { id });
+      if (expandedId === id) setExpandedId(null);
+      if (editingId === id) cancelEdit();
       refreshData();
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : 'Impossibile eliminare il conto.');
-    }
+    } catch {}
   };
 
-  const cancelEditing = () => {
-    setEditingAccountId(null);
-    setName('');
-    setType('cash');
-    setFeedback('');
-  };
-
-  const saveMovement = () => {
-    if (!selectedAccountId) {
-      setFeedback('Seleziona prima un conto.');
-      return;
-    }
-
-    const parsedAmount = Number.parseFloat(movementAmount.replace(',', '.'));
-
-    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      setFeedback('L\'importo del movimento deve essere maggiore di zero.');
-      return;
-    }
-
-    if (!movementDescription.trim()) {
-      setFeedback('Inserisci una descrizione del movimento.');
-      return;
-    }
-
+  const saveMov = (accountId: string) => {
+    const amount = Number.parseFloat(movAmount.replace(',', '.'));
+    if (!accountId || Number.isNaN(amount) || amount <= 0 || !movDesc.trim()) return;
     createTransaction(database, {
-      type: movementType,
-      amount: parsedAmount,
-      category: movementCategory,
-      description: movementDescription,
-      bookedAt: movementDate,
-      accountId: selectedAccountId,
+      type: movType,
+      amount,
+      category: '',
+      description: movDesc,
+      bookedAt: movDate,
+      accountId,
     });
-
-    setMovementType('expense');
-    setMovementAmount('0');
-    setMovementDescription('');
-    setMovementCategory('');
-    setMovementDate(todayIsoDate());
-    setFeedback('Movimento salvato sul conto.');
+    setMovAmount('');
+    setMovDesc('');
+    setMovType('expense');
+    setMovDate(todayIsoDate());
     refreshData();
   };
 
-  const removeMovement = (transactionId: string) => {
-    deleteTransaction(database, { id: transactionId });
-    setFeedback('Movimento eliminato dal conto.');
+  const removeMov = (txId: string) => {
+    deleteTransaction(database, { id: txId });
     refreshData();
   };
+
+  const addButton = (
+    <Pressable onPress={() => setShowAddForm(true)} style={styles.plusBtn}>
+      <MaterialIcons name="add" size={20} color={colors.accent} />
+    </Pressable>
+  );
 
   return (
-    <AppScreen
-      eyebrow="Conti"
-      title="Panorama dei tuoi soldi"
-      description="Partiamo da una base elegante e leggibile: i conti sono gia organizzati per tipologia, pronti per essere collegati a saldi reali e movimenti manuali."
-      hero={
-        <InfoCard
-          title="Patrimonio disponibile"
-          subtitle="Somma rapida dei conti attivi letta dal database locale"
-          value={formatCurrency(totalBalance)}
-          tone="strong"
-        />
-      }
-    >
-      {accounts.map((account) => (
-        <View key={account.id} style={styles.accountRow}>
-          <View style={styles.accountText}>
-            <Text style={styles.accountLabel}>{account.name}</Text>
-            <Text style={styles.accountDetail}>
-              {formatAccountType(account.type)}
-            </Text>
-          </View>
-          <View style={styles.accountAside}>
-            <Text style={styles.accountBalance}>{formatCurrency(account.currentBalance)}</Text>
-            <View style={styles.actionRow}>
-              <Pressable onPress={() => setSelectedAccountId(account.id)} style={styles.inlineAction}>
-                <Text style={styles.inlineActionLabel}>Apri</Text>
+    <>
+      <AppScreen eyebrow="Conti" title="Conti" actionButton={addButton}>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Totale</Text>
+          <Text style={styles.totalValue}>{formatCurrency(totalBalance)}</Text>
+        </View>
+
+        {accounts.length === 0 ? (
+          <Text style={styles.empty}>Nessun conto. Usa il + per crearne uno.</Text>
+        ) : (
+          accounts.map((account) => {
+            const isOpen = expandedId === account.id;
+            const txs = (txByAccount[account.id] ?? []).sort((a, b) => (a.bookedAt < b.bookedAt ? 1 : -1));
+            return (
+              <View key={account.id} style={styles.card}>
+                <Pressable onPress={() => toggle(account.id)} style={styles.cardHeader}>
+                  <View>
+                    <Text style={styles.cardName}>{account.name}</Text>
+                    <Text style={styles.cardType}>{TYPE_LABELS[account.type]}</Text>
+                  </View>
+                  <View style={styles.cardRight}>
+                    <Text style={styles.cardBalance}>{formatCurrency(account.currentBalance)}</Text>
+                    <Text style={styles.chevron}>{isOpen ? '▲' : '▼'}</Text>
+                  </View>
+                </Pressable>
+
+                {isOpen && (
+                  <View style={styles.expanded}>
+                    <View style={styles.rowGap}>
+                      <Pressable onPress={() => startEdit(account.id)} style={styles.chip}>
+                        <Text style={styles.chipText}>Modifica</Text>
+                      </Pressable>
+                      <Pressable onPress={() => removeAccount(account.id)} style={[styles.chip, styles.chipDanger]}>
+                        <Text style={[styles.chipText, styles.chipTextDanger]}>Elimina</Text>
+                      </Pressable>
+                    </View>
+
+                    <View style={styles.rowGap}>
+                      {(['expense', 'income'] as const).map((t) => (
+                        <Pressable
+                          key={t}
+                          onPress={() => setMovType(t)}
+                          style={[styles.chip, movType === t && styles.chipActive]}
+                        >
+                          <Text style={[styles.chipText, movType === t && styles.chipTextActive]}>
+                            {t === 'expense' ? 'Uscita' : 'Entrata'}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    <TextInput
+                      onChangeText={setMovDesc}
+                      placeholder="Descrizione"
+                      placeholderTextColor={colors.textSecondary}
+                      style={styles.input}
+                      value={movDesc}
+                    />
+                    <View style={styles.rowGap}>
+                      <TextInput
+                        keyboardType="numeric"
+                        onChangeText={setMovAmount}
+                        placeholder="Importo"
+                        placeholderTextColor={colors.textSecondary}
+                        style={[styles.input, styles.inputFlex]}
+                        value={movAmount}
+                      />
+                      <TextInput
+                        onChangeText={setMovDate}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor={colors.textSecondary}
+                        style={[styles.input, styles.inputFlex]}
+                        value={movDate}
+                      />
+                    </View>
+                    <Pressable onPress={() => saveMov(account.id)} style={styles.btn}>
+                      <Text style={styles.btnText}>+ Movimento</Text>
+                    </Pressable>
+
+                    {txs.length > 0 && (
+                      <View style={styles.txList}>
+                        {txs.map((tx) => (
+                          <View key={tx.id} style={styles.txRow}>
+                            <View style={styles.txLeft}>
+                              <Text style={styles.txDesc}>{tx.description}</Text>
+                              <Text style={styles.txMeta}>{formatDate(tx.bookedAt)}</Text>
+                            </View>
+                            <View style={styles.txRight}>
+                              <Text style={[styles.txAmount, tx.type === 'income' ? styles.income : styles.expense]}>
+                                {tx.type === 'expense' ? '−' : '+'}{formatCurrency(tx.amount)}
+                              </Text>
+                              <Pressable onPress={() => removeMov(tx.id)}>
+                                <Text style={styles.del}>×</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })
+        )}
+      </AppScreen>
+
+      <Modal visible={showAddForm} transparent={true} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingId ? 'Modifica conto' : 'Nuovo conto'}</Text>
+              <Pressable onPress={cancelEdit}>
+                <MaterialIcons name="close" size={24} color={colors.textPrimary} />
               </Pressable>
-              <Pressable onPress={() => startEditing(account.id)} style={styles.inlineAction}>
-                <Text style={styles.inlineActionLabel}>Modifica</Text>
+            </View>
+
+            <TextInput
+              onChangeText={setAccountName}
+              placeholder="Nome conto"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              value={accountName}
+            />
+            <View style={styles.rowGap}>
+              {accountTypeOptions.map((opt) => (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => setAccountType(opt.value)}
+                  style={[styles.chip, accountType === opt.value && styles.chipActive]}
+                >
+                  <Text style={[styles.chipText, accountType === opt.value && styles.chipTextActive]}>{opt.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.rowGap}>
+              <Pressable onPress={saveAccount} style={[styles.btn, styles.btnFlex]}>
+                <Text style={styles.btnText}>{editingId ? 'Aggiorna' : 'Crea conto'}</Text>
               </Pressable>
-              <Pressable onPress={() => handleDeleteAccount(account.id)} style={styles.inlineDangerAction}>
-                <Text style={styles.inlineDangerLabel}>Elimina</Text>
-              </Pressable>
+              {editingId && (
+                <Pressable onPress={cancelEdit} style={[styles.btn, styles.btnSecondary, styles.btnFlex]}>
+                  <Text style={styles.btnSecondaryText}>Annulla</Text>
+                </Pressable>
+              )}
             </View>
           </View>
         </View>
-      ))}
-
-      {groupedBalances.length > 0 ? (
-        <SectionCard
-          title="Distribuzione per tipologia"
-          description="Una lettura rapida di dove si concentra la tua liquidita tra contanti, carte e banca."
-        >
-          {groupedBalances.map((item) => (
-            <View key={item.label} style={styles.typeRow}>
-              <Text style={styles.typeLabel}>{item.label}</Text>
-              <Text style={styles.typeAmount}>{formatCurrency(item.total)}</Text>
-            </View>
-          ))}
-        </SectionCard>
-      ) : null}
-
-      <SectionCard
-        title={editingAccountId ? 'Modifica conto' : 'Aggiungi un conto'}
-        description="Il saldo del conto deriva solo dai movimenti registrati. I conti con storico collegato non possono essere eliminati per evitare incoerenze."
-      >
-        <TextField label="Nome conto" onChangeText={setName} placeholder="Es. Carta viaggi" value={name} />
-        <ChoiceChips label="Tipologia" onSelect={setType} options={accountTypeOptions} selectedValue={type} />
-        <PrimaryButton label={editingAccountId ? 'Aggiorna conto' : 'Salva conto'} onPress={saveAccount} />
-        {editingAccountId ? <PrimaryButton label="Annulla modifica" onPress={cancelEditing} tone="secondary" /> : null}
-        {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
-      </SectionCard>
-
-      {selectedAccount ? (
-        <SectionCard
-          title={`Gestione conto: ${selectedAccount.name}`}
-          description="Aggiungi rapidamente entrate e uscite direttamente nel conto selezionato."
-        >
-          <ChoiceChips
-            label="Tipo movimento"
-            onSelect={(value) => setMovementType(value as 'income' | 'expense')}
-            options={[
-              { label: 'Entrata', value: 'income' },
-              { label: 'Uscita', value: 'expense' },
-            ]}
-            selectedValue={movementType}
-          />
-          <TextField
-            label="Descrizione"
-            onChangeText={setMovementDescription}
-            placeholder="Es. Spesa supermercato"
-            value={movementDescription}
-          />
-          <TextField label="Categoria" onChangeText={setMovementCategory} placeholder="Es. Alimentari" value={movementCategory} />
-          <TextField
-            label="Importo"
-            keyboardType="numeric"
-            onChangeText={setMovementAmount}
-            placeholder="0,00"
-            value={movementAmount}
-          />
-          <TextField label="Data" onChangeText={setMovementDate} placeholder="YYYY-MM-DD" value={movementDate} />
-          <PrimaryButton label="Salva movimento" onPress={saveMovement} />
-
-          {accountTransactions.length > 0 ? (
-            accountTransactions.map((transaction) => (
-              <View key={transaction.id} style={styles.transactionRow}>
-                <View style={styles.accountText}>
-                  <Text style={styles.accountLabel}>{transaction.description}</Text>
-                  <Text style={styles.accountDetail}>
-                    {formatTransactionType(transaction.type)} · {formatDate(transaction.bookedAt)} · {transaction.category}
-                  </Text>
-                </View>
-                <View style={styles.accountAside}>
-                  <Text style={styles.accountBalance}>{formatCurrency(transaction.amount)}</Text>
-                  <Pressable onPress={() => removeMovement(transaction.id)} style={styles.inlineDangerAction}>
-                    <Text style={styles.inlineDangerLabel}>Elimina</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))
-          ) : (
-            <Text style={styles.accountDetail}>Nessun movimento registrato per questo conto.</Text>
-          )}
-        </SectionCard>
-      ) : null}
-    </AppScreen>
+      </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  accountRow: {
-    backgroundColor: colors.panel,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  accountText: {
-    flex: 1,
-    gap: 4,
-  },
-  accountLabel: {
-    fontFamily: typography.bodyStrong,
-    fontSize: 18,
-    color: colors.textPrimary,
-  },
-  accountDetail: {
-    fontFamily: typography.body,
-    fontSize: 14,
-    lineHeight: 21,
-    color: colors.textSecondary,
-  },
-  accountBalance: {
-    fontFamily: typography.title,
-    fontSize: 20,
-    color: colors.textPrimary,
-    alignSelf: 'center',
-  },
-  accountAside: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  feedback: {
-    fontFamily: typography.body,
-    fontSize: 14,
-    color: colors.success,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  inlineAction: {
+  plusBtn: {
+    width: 32,
+    height: 32,
     borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
     backgroundColor: colors.panelMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  inlineActionLabel: {
-    fontFamily: typography.bodyStrong,
-    fontSize: 12,
-    color: colors.textPrimary,
-  },
-  inlineDangerAction: {
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  inlineDangerLabel: {
-    fontFamily: typography.bodyStrong,
-    fontSize: 12,
-    color: colors.danger,
-  },
-  typeRow: {
+  totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: spacing.md,
+    paddingHorizontal: spacing.xs,
   },
-  typeLabel: {
+  totalLabel: {
     fontFamily: typography.body,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.textSecondary,
   },
-  typeAmount: {
+  totalValue: {
+    fontFamily: typography.title,
+    fontSize: 22,
+    color: colors.textPrimary,
+  },
+  empty: {
+    fontFamily: typography.body,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: spacing.md,
+  },
+  card: {
+    backgroundColor: colors.panel,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  cardName: {
     fontFamily: typography.bodyStrong,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  cardType: {
+    fontFamily: typography.body,
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  cardRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  cardBalance: {
+    fontFamily: typography.title,
     fontSize: 16,
     color: colors.textPrimary,
   },
-  transactionRow: {
-    backgroundColor: colors.panelMuted,
-    borderRadius: radius.md,
-    padding: spacing.md,
+  chevron: {
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  expanded: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  rowGap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: spacing.xs,
+  },
+  chip: {
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.panelMuted,
+  },
+  chipActive: {
+    backgroundColor: colors.panelStrong,
+    borderColor: colors.panelStrong,
+  },
+  chipDanger: {
+    borderColor: colors.danger,
+    backgroundColor: 'transparent',
+  },
+  chipText: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 12,
+    color: colors.textPrimary,
+  },
+  chipTextActive: {
+    color: colors.textInverse,
+  },
+  chipTextDanger: {
+    color: colors.danger,
+  },
+  input: {
+    backgroundColor: colors.canvas,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+    fontFamily: typography.body,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  inputFlex: {
+    flex: 1,
+  },
+  btn: {
+    backgroundColor: colors.panelStrong,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  btnFlex: {
+    flex: 1,
+  },
+  btnSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  btnText: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 13,
+    color: colors.textInverse,
+  },
+  btnSecondaryText: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  txList: {
+    gap: 1,
+    marginTop: spacing.xs,
+  },
+  txRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  txLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  txDesc: {
+    fontFamily: typography.body,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  txMeta: {
+    fontFamily: typography.body,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  txRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  txAmount: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 13,
+  },
+  income: {
+    color: colors.success,
+  },
+  expense: {
+    color: colors.danger,
+  },
+  del: {
+    fontSize: 18,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.canvas,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing.lg,
     gap: spacing.md,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 18,
+    color: colors.textPrimary,
   },
 });

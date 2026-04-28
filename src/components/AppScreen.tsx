@@ -1,4 +1,4 @@
-import { PropsWithChildren, ReactNode } from 'react';
+import { PropsWithChildren, ReactNode, ReactElement } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,19 +8,23 @@ import { colors, radius, spacing, typography } from '../theme/tokens';
 type AppScreenProps = PropsWithChildren<{
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   hero?: ReactNode;
+  actionButton?: ReactElement | null;
 }>;
 
-export function AppScreen({ eyebrow, title, description, hero, children }: AppScreenProps) {
+export function AppScreen({ eyebrow, title, description, hero, actionButton, children }: AppScreenProps) {
   return (
     <LinearGradient colors={[colors.canvas, '#f3e8d6']} style={styles.gradient}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <Text style={styles.eyebrow}>{eyebrow}</Text>
+            <View style={styles.headerTop}>
+              <Text style={styles.eyebrow}>{eyebrow}</Text>
+              {actionButton}
+            </View>
             <Text style={styles.title}>{title}</Text>
-            <Text style={styles.description}>{description}</Text>
+            {description ? <Text style={styles.description}>{description}</Text> : null}
           </View>
           {hero}
           <View style={styles.body}>{children}</View>
@@ -43,6 +47,11 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: spacing.xs,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   eyebrow: {
     fontFamily: typography.bodyStrong,

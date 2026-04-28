@@ -1,12 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 import { AppScreen } from '../components/AppScreen';
-import { ChoiceChips } from '../components/ChoiceChips';
-import { InfoCard } from '../components/InfoCard';
-import { PrimaryButton } from '../components/PrimaryButton';
-import { SectionCard } from '../components/SectionCard';
-import { TextField } from '../components/TextField';
 import { useDatabase } from '../db/DatabaseProvider';
 import { useAccounts } from '../features/accounts/useAccounts';
 import {
@@ -25,14 +21,15 @@ export function RatesScreen() {
   const { database, refreshData } = useDatabase();
   const { accounts } = useAccounts();
   const { installments } = useInstallments();
+
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
   const [cashflowType, setCashflowType] = useState<'income' | 'expense'>('expense');
   const [name, setName] = useState('');
   const [installmentAmount, setInstallmentAmount] = useState('0');
   const [totalInstallments, setTotalInstallments] = useState('12');
   const [nextDueDate, setNextDueDate] = useState(todayIsoDate());
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '');
-  const [feedback, setFeedback] = useState('');
-  const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
 
   const accountOptions = useMemo(
     () => accounts.map((account) => ({ label: account.name, value: account.id })),
@@ -45,18 +42,7 @@ export function RatesScreen() {
     const parsedAmount = Number.parseFloat(installmentAmount.replace(',', '.'));
     const parsedCount = Number.parseInt(totalInstallments, 10);
 
-    if (!name.trim()) {
-      setFeedback('Inserisci un nome per la rata.');
-      return;
-    }
-
-    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      setFeedback('L\'importo rata deve essere valido.');
-      return;
-    }
-
-    if (!Number.isInteger(parsedCount) || parsedCount <= 0) {
-      setFeedback('Il numero totale rate deve essere un intero maggiore di zero.');
+    if (!name.trim() || Number.isNaN(parsedAmount) || parsedAmount <= 0 || !Number.isInteger(parsedCount) || parsedCount <= 0) {
       return;
     }
 
@@ -82,8 +68,18 @@ export function RatesScreen() {
     }
 
     clearForm();
-    setFeedback(editingInstallmentId ? 'Rata aggiornata.' : 'Rata salvata.');
     refreshData();
+    setShowAddForm(false);
+  };
+
+  const clearForm = () => {
+    setEditingInstallmentId(null);
+    setCashflowType('expense');
+    setName('');
+    setInstallmentAmount('0');
+    setTotalInstallments('12');
+    setNextDueDate(todayIsoDate());
+    setAccountId(accounts[0]?.id ?? '');
   };
 
   const startEditing = (installmentId: string) => {
@@ -100,28 +96,16 @@ export function RatesScreen() {
     setTotalInstallments(String(item.totalInstallments));
     setNextDueDate(item.nextDueDate);
     setAccountId(item.accountId ?? '');
-    setFeedback('Modifica la rata e salva per aggiornare i dati.');
-  };
-
-  const clearForm = () => {
-    setEditingInstallmentId(null);
-    setCashflowType('expense');
-    setName('');
-    setInstallmentAmount('0');
-    setTotalInstallments('12');
-    setNextDueDate(todayIsoDate());
-    setAccountId(accounts[0]?.id ?? '');
+    setShowAddForm(true);
   };
 
   const markInstallment = (installmentId: string) => {
     registerInstallmentPayment(database, { installmentId });
-    setFeedback('Rata registrata.');
     refreshData();
   };
 
   const toggleRate = (installmentId: string, active: boolean) => {
     toggleInstallmentActive(database, { installmentId, active: !active });
-    setFeedback(active ? 'Rata messa in pausa.' : 'Rata riattivata.');
     refreshData();
   };
 
@@ -130,154 +114,301 @@ export function RatesScreen() {
     if (editingInstallmentId === installmentId) {
       clearForm();
     }
-    setFeedback('Rata eliminata.');
     refreshData();
   };
 
-  return (
-    <AppScreen
-      eyebrow="Rate"
-      title="Entrate e uscite ricorrenti"
-      description="Gestisci cashflow rateale con progressivo, scadenze e registrazione automatica del movimento."
-      hero={<InfoCard title="Rate attive" subtitle="Piani attivi in questo momento" value={`${activeRatesCount}`} tone="strong" />}
-    >
-      <SectionCard title={editingInstallmentId ? 'Modifica rata' : 'Nuova rata'} description="Le rate possono essere entrate o uscite e avanzano a ogni registrazione.">
-        <ChoiceChips
-          label="Tipo cashflow"
-          onSelect={(value) => setCashflowType(value as 'income' | 'expense')}
-          options={[
-            { label: 'Entrata', value: 'income' },
-            { label: 'Uscita', value: 'expense' },
-          ]}
-          selectedValue={cashflowType}
-        />
-        <TextField label="Nome" onChangeText={setName} placeholder="Es. Rimborso auto" value={name} />
-        <TextField
-          label="Importo rata"
-          keyboardType="numeric"
-          onChangeText={setInstallmentAmount}
-          placeholder="0,00"
-          value={installmentAmount}
-        />
-        <TextField
-          label="Numero totale rate"
-          keyboardType="numeric"
-          onChangeText={setTotalInstallments}
-          placeholder="12"
-          value={totalInstallments}
-        />
-        <TextField label="Prossima scadenza" onChangeText={setNextDueDate} placeholder="YYYY-MM-DD" value={nextDueDate} />
-        {accountOptions.length > 0 ? (
-          <ChoiceChips label="Conto associato" onSelect={setAccountId} options={accountOptions} selectedValue={accountId} />
-        ) : null}
-        <PrimaryButton label={editingInstallmentId ? 'Aggiorna rata' : 'Salva rata'} onPress={saveRate} />
-        {editingInstallmentId ? <PrimaryButton label="Annulla modifica" onPress={clearForm} tone="secondary" /> : null}
-        {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
-      </SectionCard>
+  const addButton = (
+    <Pressable onPress={() => setShowAddForm(true)} style={styles.plusBtn}>
+      <MaterialIcons name="add" size={20} color={colors.accent} />
+    </Pressable>
+  );
 
-      <SectionCard title="Elenco rate" description="Segna rata quando incassi o paghi: il piano avanza automaticamente.">
-        {installments.length > 0 ? (
+  return (
+    <>
+      <AppScreen
+        eyebrow="Rate"
+        title="Entrate e uscite ricorrenti"
+        actionButton={addButton}
+        hero={
+          <View style={styles.infoCard}>
+            <Text style={styles.infoLabel}>Rate attive</Text>
+            <Text style={styles.infoValue}>{activeRatesCount}</Text>
+          </View>
+        }
+      >
+        {installments.length === 0 ? (
+          <Text style={styles.empty}>Nessuna rata. Usa il + per crearne una.</Text>
+        ) : (
           installments.map((item) => (
-            <View key={item.id} style={styles.rateRow}>
-              <View style={styles.rateText}>
-                <Text style={styles.rateTitle}>{item.name}</Text>
-                <Text style={styles.rateMeta}>
-                  {item.cashflowType === 'income' ? 'Entrata' : 'Uscita'} · Rata {Math.min(item.paidInstallments + 1, item.totalInstallments)}/
-                  {item.totalInstallments} · Scade il {formatDate(item.nextDueDate)}
-                </Text>
-                <Text style={styles.rateMeta}>Residue: {item.remainingInstallments} · Conto: {item.accountName ?? 'Nessuno'}</Text>
+            <View key={item.id} style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardLeft}>
+                  <Text style={styles.cardTitle}>{item.name}</Text>
+                  <Text style={styles.cardMeta}>
+                    {item.cashflowType === 'income' ? 'Entrata' : 'Uscita'} · Rata {Math.min(item.paidInstallments + 1, item.totalInstallments)}/
+                    {item.totalInstallments} · Scade il {formatDate(item.nextDueDate)}
+                  </Text>
+                  <Text style={styles.cardMeta}>Residue: {item.remainingInstallments} · Conto: {item.accountName ?? 'Nessuno'}</Text>
+                </View>
+                <Text style={styles.cardAmount}>{formatCurrency(item.installmentAmount)}</Text>
               </View>
-              <View style={styles.rateAside}>
-                <Text style={styles.rateAmount}>{formatCurrency(item.installmentAmount)}</Text>
-                <Pressable onPress={() => startEditing(item.id)} style={styles.inlineAction}>
-                  <Text style={styles.inlineActionLabel}>Modifica</Text>
+
+              <View style={styles.cardActions}>
+                <Pressable onPress={() => startEditing(item.id)} style={styles.chip}>
+                  <Text style={styles.chipText}>Modifica</Text>
                 </Pressable>
                 {item.active && item.remainingInstallments > 0 ? (
-                  <PrimaryButton label="Segna rata" onPress={() => markInstallment(item.id)} tone="secondary" />
-                ) : null}
-                {item.remainingInstallments > 0 ? (
-                  <Pressable onPress={() => toggleRate(item.id, item.active)} style={styles.inlineAction}>
-                    <Text style={styles.inlineActionLabel}>{item.active ? 'Pausa' : 'Riattiva'}</Text>
+                  <Pressable onPress={() => markInstallment(item.id)} style={[styles.chip, styles.chipPrimary]}>
+                    <Text style={[styles.chipText, styles.chipPrimaryText]}>Segna rata</Text>
                   </Pressable>
                 ) : null}
-                <Pressable onPress={() => removeRate(item.id)} style={styles.inlineDangerAction}>
-                  <Text style={styles.inlineDangerLabel}>Elimina</Text>
+                {item.remainingInstallments > 0 ? (
+                  <Pressable onPress={() => toggleRate(item.id, item.active)} style={styles.chip}>
+                    <Text style={styles.chipText}>{item.active ? 'Pausa' : 'Riattiva'}</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable onPress={() => removeRate(item.id)} style={[styles.chip, styles.chipDanger]}>
+                  <Text style={[styles.chipText, styles.chipDangerText]}>Elimina</Text>
                 </Pressable>
               </View>
             </View>
           ))
-        ) : (
-          <Text style={styles.rateMeta}>Nessuna rata registrata per ora.</Text>
         )}
-      </SectionCard>
-    </AppScreen>
+      </AppScreen>
+
+      <Modal visible={showAddForm} transparent={true} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingInstallmentId ? 'Modifica rata' : 'Nuova rata'}</Text>
+              <Pressable onPress={() => setShowAddForm(false)}>
+                <MaterialIcons name="close" size={24} color={colors.textPrimary} />
+              </Pressable>
+            </View>
+
+            <View style={styles.rowGap}>
+              {(['expense', 'income'] as const).map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setCashflowType(t)}
+                  style={[styles.chip, cashflowType === t && styles.chipActive]}
+                >
+                  <Text style={[styles.chipText, cashflowType === t && styles.chipTextActive]}>
+                    {t === 'expense' ? 'Uscita' : 'Entrata'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <TextInput
+              onChangeText={setName}
+              placeholder="Nome rata"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              value={name}
+            />
+            <TextInput
+              keyboardType="numeric"
+              onChangeText={setInstallmentAmount}
+              placeholder="Importo rata"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              value={installmentAmount}
+            />
+            <TextInput
+              keyboardType="numeric"
+              onChangeText={setTotalInstallments}
+              placeholder="Numero totale rate"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              value={totalInstallments}
+            />
+            <TextInput
+              onChangeText={setNextDueDate}
+              placeholder="Prossima scadenza (YYYY-MM-DD)"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              value={nextDueDate}
+            />
+
+            {accountOptions.length > 0 && (
+              <View style={styles.rowGap}>
+                {accountOptions.map((opt) => (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setAccountId(opt.value)}
+                    style={[styles.chip, accountId === opt.value && styles.chipActive]}
+                  >
+                    <Text style={[styles.chipText, accountId === opt.value && styles.chipTextActive]}>{opt.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            <View style={styles.rowGap}>
+              <Pressable onPress={saveRate} style={[styles.chip, styles.chipPrimary, styles.btnFlex]}>
+                <Text style={[styles.chipText, styles.chipPrimaryText]}>{editingInstallmentId ? 'Aggiorna rata' : 'Salva rata'}</Text>
+              </Pressable>
+              {editingInstallmentId && (
+                <Pressable onPress={() => setShowAddForm(false)} style={[styles.chip, styles.btnFlex]}>
+                  <Text style={styles.chipText}>Annulla</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  rateRow: {
+  plusBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    backgroundColor: colors.panelMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoCard: {
     backgroundColor: colors.panel,
     borderRadius: radius.md,
-    padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    padding: spacing.md,
+    alignItems: 'center',
   },
-  rateText: {
-    flex: 1,
-    gap: 4,
-  },
-  rateTitle: {
-    fontFamily: typography.title,
-    fontSize: 18,
-    color: colors.textPrimary,
-  },
-  rateMeta: {
+  infoLabel: {
     fontFamily: typography.body,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12,
     color: colors.textSecondary,
   },
-  rateAside: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  rateAmount: {
+  infoValue: {
     fontFamily: typography.title,
-    fontSize: 18,
+    fontSize: 28,
     color: colors.textPrimary,
   },
-  feedback: {
+  empty: {
     fontFamily: typography.body,
     fontSize: 14,
-    color: colors.success,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: spacing.md,
   },
-  inlineAction: {
+  card: {
+    backgroundColor: colors.panel,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  cardLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  cardTitle: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  cardMeta: {
+    fontFamily: typography.body,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  cardAmount: {
+    fontFamily: typography.title,
+    fontSize: 16,
+    color: colors.textPrimary,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  rowGap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: spacing.xs,
+  },
+  chip: {
     borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.panelMuted,
   },
-  inlineActionLabel: {
+  chipActive: {
+    backgroundColor: colors.panelStrong,
+    borderColor: colors.panelStrong,
+  },
+  chipPrimary: {
+    backgroundColor: colors.panelStrong,
+    borderColor: colors.panelStrong,
+  },
+  chipDanger: {
+    borderColor: colors.danger,
+    backgroundColor: 'transparent',
+  },
+  chipText: {
     fontFamily: typography.bodyStrong,
     fontSize: 12,
     color: colors.textPrimary,
   },
-  inlineDangerAction: {
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.danger,
+  chipTextActive: {
+    color: colors.textInverse,
   },
-  inlineDangerLabel: {
-    fontFamily: typography.bodyStrong,
-    fontSize: 12,
+  chipPrimaryText: {
+    color: colors.textInverse,
+  },
+  chipDangerText: {
     color: colors.danger,
+  },
+  btnFlex: {
+    flex: 1,
+  },
+  input: {
+    backgroundColor: colors.canvas,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+    fontFamily: typography.body,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.canvas,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 18,
+    color: colors.textPrimary,
   },
 });

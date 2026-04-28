@@ -1,7 +1,5 @@
 import * as SQLite from 'expo-sqlite';
 
-import type { AccountType } from '../types/domain';
-
 let databaseInstance: SQLite.SQLiteDatabase | null = null;
 
 export function getDatabase() {
@@ -79,13 +77,23 @@ export function initializeDatabase() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (account_id) REFERENCES accounts (id)
     );
+
+    CREATE TABLE IF NOT EXISTS personal_economic_events (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      cashflow_type TEXT NOT NULL DEFAULT 'expense',
+      recurrence TEXT NOT NULL DEFAULT 'none',
+      due_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'todo',
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   ensureColumn(db, 'obligations', 'paid_amount', 'REAL NOT NULL DEFAULT 0');
   ensureColumn(db, 'ledger_transactions', 'transfer_group_id', 'TEXT');
   ensureColumn(db, 'installment_plans', 'cashflow_type', "TEXT NOT NULL DEFAULT 'expense'");
-
-  seedStarterAccounts(db);
+  ensureColumn(db, 'personal_economic_events', 'recurrence', "TEXT NOT NULL DEFAULT 'none'");
 
   return db;
 }
@@ -99,23 +107,3 @@ function ensureColumn(db: SQLite.SQLiteDatabase, tableName: string, columnName: 
   }
 }
 
-function seedStarterAccounts(db: SQLite.SQLiteDatabase) {
-  const result = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM accounts');
-
-  if ((result?.count ?? 0) > 0) {
-    return;
-  }
-
-  const starterAccounts: Array<{ name: string; type: AccountType }> = [
-    { name: 'Portafoglio', type: 'cash' },
-    { name: 'Carta principale', type: 'card' },
-    { name: 'Conto corrente', type: 'bank' },
-  ];
-
-  starterAccounts.forEach((account, index) => {
-    db.runSync(
-      'INSERT INTO accounts (id, name, type, opening_balance, currency) VALUES (?, ?, ?, ?, ?)',
-      [`starter-account-${index + 1}`, account.name, account.type, 0, 'EUR'],
-    );
-  });
-}
