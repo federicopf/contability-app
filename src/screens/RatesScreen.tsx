@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppScreen } from '../components/AppScreen';
 import { useDatabase } from '../db/DatabaseProvider';
@@ -21,6 +22,7 @@ export function RatesScreen() {
   const { database, refreshData } = useDatabase();
   const { accounts } = useAccounts();
   const { installments } = useInstallments();
+  const insets = useSafeAreaInsets();
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingInstallmentId, setEditingInstallmentId] = useState<string | null>(null);
@@ -178,7 +180,7 @@ export function RatesScreen() {
 
       <Modal visible={showAddForm} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { marginBottom: Math.max(insets.bottom, spacing.sm), paddingBottom: spacing.lg + insets.bottom }] }>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{editingInstallmentId ? 'Modifica rata' : 'Nuova rata'}</Text>
               <Pressable onPress={() => setShowAddForm(false)}>

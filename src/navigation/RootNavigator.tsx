@@ -1,5 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccountsScreen } from '../screens/AccountsScreen';
 import { PersonalEventsScreen } from '../screens/PersonalEventsScreen';
@@ -17,6 +18,8 @@ export type RootTabParamList = {
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
 export function RootNavigator() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -27,16 +30,17 @@ export function RootNavigator() {
           position: 'absolute',
           left: 16,
           right: 16,
-          bottom: 16,
-          height: 74,
+          bottom: Math.max(16, insets.bottom + 8),
+          height: 62 + Math.max(10, insets.bottom),
           borderRadius: radius.lg,
           backgroundColor: 'rgba(255, 253, 248, 0.94)',
           borderTopWidth: 0,
           paddingTop: 10,
-          paddingBottom: 12,
+          paddingBottom: Math.max(10, insets.bottom),
           paddingHorizontal: 8,
           elevation: 0,
         },
+        tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {
           fontFamily: typography.bodyStrong,
           fontSize: 12,

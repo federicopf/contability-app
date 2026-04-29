@@ -22,6 +22,7 @@ export function initializeDatabase() {
       type TEXT NOT NULL,
       opening_balance REAL NOT NULL DEFAULT 0,
       currency TEXT NOT NULL DEFAULT 'EUR',
+      deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -94,6 +95,7 @@ export function initializeDatabase() {
   ensureColumn(db, 'ledger_transactions', 'transfer_group_id', 'TEXT');
   ensureColumn(db, 'installment_plans', 'cashflow_type', "TEXT NOT NULL DEFAULT 'expense'");
   ensureColumn(db, 'personal_economic_events', 'recurrence', "TEXT NOT NULL DEFAULT 'none'");
+  ensureColumn(db, 'accounts', 'deleted_at', 'TEXT');
 
   return db;
 }

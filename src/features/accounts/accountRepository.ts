@@ -31,6 +31,7 @@ export function listAccounts(database: SQLite.SQLiteDatabase): AccountListItem[]
       ), 0) as current_balance
     FROM accounts a
     LEFT JOIN ledger_transactions t ON t.account_id = a.id
+    WHERE a.deleted_at IS NULL
     GROUP BY a.id, a.name, a.type, a.currency
     ORDER BY CASE a.type
       WHEN 'cash' THEN 1
@@ -64,22 +65,13 @@ export function updateAccount(
   database: SQLite.SQLiteDatabase,
   input: { id: string; name: string; type: AccountType },
 ) {
-  database.runSync('UPDATE accounts SET name = ?, type = ? WHERE id = ?', [input.name.trim(), input.type, input.id]);
+  database.runSync('UPDATE accounts SET name = ?, type = ? WHERE id = ? AND deleted_at IS NULL', [input.name.trim(), input.type, input.id]);
 }
 
 export function deleteAccount(database: SQLite.SQLiteDatabase, input: { id: string }) {
-  const transactionCount = database.getFirstSync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM ledger_transactions WHERE account_id = ? OR related_account_id = ?',
-    [input.id, input.id],
-  );
-  const subscriptionCount = database.getFirstSync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM subscriptions WHERE account_id = ?',
-    [input.id],
-  );
-
-  if ((transactionCount?.count ?? 0) > 0 || (subscriptionCount?.count ?? 0) > 0) {
-    throw new Error('Non puoi eliminare un conto che ha gia movimenti o abbonamenti collegati.');
-  }
-
-  database.runSync('DELETE FROM accounts WHERE id = ?', [input.id]);
+  database.withTransactionSync(() => {
+    database.runSync('UPDATE accounts SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?', [input.id]);
+    database.runSync('UPDATE subscriptions SET account_id = NULL WHERE account_id = ?', [input.id]);
+    database.runSync('UPDATE installment_plans SET account_id = NULL WHERE account_id = ?', [input.id]);
+  });
 }

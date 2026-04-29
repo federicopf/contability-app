@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppScreen } from '../components/AppScreen';
 import { useDatabase } from '../db/DatabaseProvider';
@@ -18,6 +19,7 @@ import { formatDate } from '../utils/format';
 export function PersonalEventsScreen() {
   const { database, refreshData } = useDatabase();
   const { events } = usePersonalEconomicEvents();
+  const insets = useSafeAreaInsets();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -191,7 +193,7 @@ export function PersonalEventsScreen() {
 
       <Modal visible={showAddForm} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { marginBottom: Math.max(insets.bottom, spacing.sm), paddingBottom: spacing.lg + insets.bottom }] }>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{editingId ? 'Modifica evento' : 'Nuovo evento'}</Text>
               <Pressable onPress={() => setShowAddForm(false)}>

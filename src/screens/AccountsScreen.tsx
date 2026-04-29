@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppScreen } from '../components/AppScreen';
 import { useDatabase } from '../db/DatabaseProvider';
@@ -33,10 +34,12 @@ export function AccountsScreen() {
   const { database, refreshData } = useDatabase();
   const { accounts } = useAccounts();
   const { transactions } = useTransactions();
+  const insets = useSafeAreaInsets();
 
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showMovementForm, setShowMovementForm] = useState(false);
 
   const [accountName, setAccountName] = useState('');
   const [accountType, setAccountType] = useState<AccountType>('cash');
@@ -58,7 +61,15 @@ export function AccountsScreen() {
     return map;
   }, [transactions]);
 
-  const toggle = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
+  const selectedAccount = useMemo(
+    () => accounts.find((account) => account.id === selectedAccountId) ?? null,
+    [accounts, selectedAccountId],
+  );
+
+  const selectedAccountTxs = useMemo(() => {
+    if (!selectedAccountId) return [];
+    return (txByAccount[selectedAccountId] ?? []).sort((a, b) => (a.bookedAt < b.bookedAt ? 1 : -1));
+  }, [selectedAccountId, txByAccount]);
 
   const saveAccount = () => {
     if (!accountName.trim()) return;
@@ -73,17 +84,12 @@ export function AccountsScreen() {
   };
 
   const startEdit = (id: string) => {
-    const a = accounts.find((x) => x.id === id);
-    if (!a) return;
-    setEditingId(a.id);
-    setAccountName(a.name);
-    setAccountType(a.type);
+    const account = accounts.find((item) => item.id === id);
+    if (!account) return;
+    setEditingId(account.id);
+    setAccountName(account.name);
+    setAccountType(account.type);
     setShowAddForm(true);
-  };
-
-  const cancelEdit = () => {
-    clearForm();
-    setShowAddForm(false);
   };
 
   const clearForm = () => {
@@ -92,13 +98,21 @@ export function AccountsScreen() {
     setAccountType('cash');
   };
 
+  const cancelEdit = () => {
+    clearForm();
+    setShowAddForm(false);
+  };
+
   const removeAccount = (id: string) => {
-    try {
-      deleteAccount(database, { id });
-      if (expandedId === id) setExpandedId(null);
-      if (editingId === id) cancelEdit();
-      refreshData();
-    } catch {}
+    deleteAccount(database, { id });
+    if (selectedAccountId === id) {
+      setSelectedAccountId(null);
+      setShowMovementForm(false);
+    }
+    if (editingId === id) {
+      cancelEdit();
+    }
+    refreshData();
   };
 
   const saveMov = (accountId: string) => {
@@ -117,6 +131,7 @@ export function AccountsScreen() {
     setMovType('expense');
     setMovDate(todayIsoDate());
     refreshData();
+    setShowMovementForm(false);
   };
 
   const removeMov = (txId: string) => {
@@ -141,106 +156,29 @@ export function AccountsScreen() {
         {accounts.length === 0 ? (
           <Text style={styles.empty}>Nessun conto. Usa il + per crearne uno.</Text>
         ) : (
-          accounts.map((account) => {
-            const isOpen = expandedId === account.id;
-            const txs = (txByAccount[account.id] ?? []).sort((a, b) => (a.bookedAt < b.bookedAt ? 1 : -1));
-            return (
-              <View key={account.id} style={styles.card}>
-                <Pressable onPress={() => toggle(account.id)} style={styles.cardHeader}>
-                  <View>
-                    <Text style={styles.cardName}>{account.name}</Text>
-                    <Text style={styles.cardType}>{TYPE_LABELS[account.type]}</Text>
-                  </View>
-                  <View style={styles.cardRight}>
-                    <Text style={styles.cardBalance}>{formatCurrency(account.currentBalance)}</Text>
-                    <Text style={styles.chevron}>{isOpen ? '▲' : '▼'}</Text>
-                  </View>
-                </Pressable>
-
-                {isOpen && (
-                  <View style={styles.expanded}>
-                    <View style={styles.rowGap}>
-                      <Pressable onPress={() => startEdit(account.id)} style={styles.chip}>
-                        <Text style={styles.chipText}>Modifica</Text>
-                      </Pressable>
-                      <Pressable onPress={() => removeAccount(account.id)} style={[styles.chip, styles.chipDanger]}>
-                        <Text style={[styles.chipText, styles.chipTextDanger]}>Elimina</Text>
-                      </Pressable>
-                    </View>
-
-                    <View style={styles.rowGap}>
-                      {(['expense', 'income'] as const).map((t) => (
-                        <Pressable
-                          key={t}
-                          onPress={() => setMovType(t)}
-                          style={[styles.chip, movType === t && styles.chipActive]}
-                        >
-                          <Text style={[styles.chipText, movType === t && styles.chipTextActive]}>
-                            {t === 'expense' ? 'Uscita' : 'Entrata'}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    <TextInput
-                      onChangeText={setMovDesc}
-                      placeholder="Descrizione"
-                      placeholderTextColor={colors.textSecondary}
-                      style={styles.input}
-                      value={movDesc}
-                    />
-                    <View style={styles.rowGap}>
-                      <TextInput
-                        keyboardType="numeric"
-                        onChangeText={setMovAmount}
-                        placeholder="Importo"
-                        placeholderTextColor={colors.textSecondary}
-                        style={[styles.input, styles.inputFlex]}
-                        value={movAmount}
-                      />
-                      <TextInput
-                        onChangeText={setMovDate}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={colors.textSecondary}
-                        style={[styles.input, styles.inputFlex]}
-                        value={movDate}
-                      />
-                    </View>
-                    <Pressable onPress={() => saveMov(account.id)} style={styles.btn}>
-                      <Text style={styles.btnText}>+ Movimento</Text>
-                    </Pressable>
-
-                    {txs.length > 0 && (
-                      <View style={styles.txList}>
-                        {txs.map((tx) => (
-                          <View key={tx.id} style={styles.txRow}>
-                            <View style={styles.txLeft}>
-                              <Text style={styles.txDesc}>{tx.description}</Text>
-                              <Text style={styles.txMeta}>{formatDate(tx.bookedAt)}</Text>
-                            </View>
-                            <View style={styles.txRight}>
-                              <Text style={[styles.txAmount, tx.type === 'income' ? styles.income : styles.expense]}>
-                                {tx.type === 'expense' ? '−' : '+'}{formatCurrency(tx.amount)}
-                              </Text>
-                              <Pressable onPress={() => removeMov(tx.id)}>
-                                <Text style={styles.del}>×</Text>
-                              </Pressable>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                )}
+          accounts.map((account) => (
+            <Pressable key={account.id} onPress={() => setSelectedAccountId(account.id)} style={styles.cardHeaderOnly}>
+              <View>
+                <Text style={styles.cardName}>{account.name}</Text>
+                <Text style={styles.cardType}>{TYPE_LABELS[account.type]}</Text>
               </View>
-            );
-          })
+              <View style={styles.cardRight}>
+                <Text style={styles.cardBalance}>{formatCurrency(account.currentBalance)}</Text>
+                <MaterialIcons name="chevron-right" size={20} color={colors.textSecondary} />
+              </View>
+            </Pressable>
+          ))
         )}
       </AppScreen>
 
       <Modal visible={showAddForm} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View
+            style={[
+              styles.modalContent,
+              { marginBottom: Math.max(insets.bottom, spacing.sm), paddingBottom: spacing.lg + insets.bottom },
+            ]}
+          >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{editingId ? 'Modifica conto' : 'Nuovo conto'}</Text>
               <Pressable onPress={cancelEdit}>
@@ -276,6 +214,126 @@ export function AccountsScreen() {
                 </Pressable>
               )}
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={selectedAccount !== null} animationType="slide" onRequestClose={() => setSelectedAccountId(null)}>
+        <View style={styles.detailRoot}>
+          {selectedAccount ? (
+            <AppScreen
+              eyebrow="Conto"
+              title={selectedAccount.name}
+              actionButton={
+                <Pressable onPress={() => setShowMovementForm(true)} style={styles.plusBtn}>
+                  <MaterialIcons name="add" size={20} color={colors.accent} />
+                </Pressable>
+              }
+            >
+              <Pressable onPress={() => setSelectedAccountId(null)} style={styles.backBtn}>
+                <MaterialIcons name="arrow-back" size={18} color={colors.textPrimary} />
+                <Text style={styles.backText}>Torna ai conti</Text>
+              </Pressable>
+
+              <View style={styles.detailCard}>
+                <Text style={styles.cardType}>{TYPE_LABELS[selectedAccount.type]}</Text>
+                <Text style={styles.totalValue}>{formatCurrency(selectedAccount.currentBalance)}</Text>
+                <View style={styles.rowGap}>
+                  <Pressable onPress={() => startEdit(selectedAccount.id)} style={styles.chip}>
+                    <Text style={styles.chipText}>Modifica</Text>
+                  </Pressable>
+                  <Pressable onPress={() => removeAccount(selectedAccount.id)} style={[styles.chip, styles.chipDanger]}>
+                    <Text style={[styles.chipText, styles.chipTextDanger]}>Elimina</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.detailCard}>
+                <Text style={styles.cardType}>Movimenti</Text>
+                {selectedAccountTxs.length === 0 ? (
+                  <Text style={styles.empty}>Nessun movimento. Usa il + in alto per inserirlo.</Text>
+                ) : (
+                  <View style={styles.txList}>
+                    {selectedAccountTxs.map((tx) => (
+                      <View key={tx.id} style={styles.txRow}>
+                        <View style={styles.txLeft}>
+                          <Text style={styles.txDesc}>{tx.description}</Text>
+                          <Text style={styles.txMeta}>{formatDate(tx.bookedAt)}</Text>
+                        </View>
+                        <View style={styles.txRight}>
+                          <Text style={[styles.txAmount, tx.type === 'income' ? styles.income : styles.expense]}>
+                            {tx.type === 'expense' ? '-' : '+'}{formatCurrency(tx.amount)}
+                          </Text>
+                          <Pressable onPress={() => removeMov(tx.id)}>
+                            <Text style={styles.del}>x</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </AppScreen>
+          ) : null}
+        </View>
+      </Modal>
+
+      <Modal visible={showMovementForm && selectedAccount !== null} transparent={true} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { marginBottom: Math.max(insets.bottom, spacing.sm), paddingBottom: spacing.lg + insets.bottom },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Nuovo movimento</Text>
+              <Pressable onPress={() => setShowMovementForm(false)}>
+                <MaterialIcons name="close" size={24} color={colors.textPrimary} />
+              </Pressable>
+            </View>
+
+            <View style={styles.rowGap}>
+              {(['expense', 'income'] as const).map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setMovType(t)}
+                  style={[styles.chip, movType === t && styles.chipActive]}
+                >
+                  <Text style={[styles.chipText, movType === t && styles.chipTextActive]}>
+                    {t === 'expense' ? 'Uscita' : 'Entrata'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <TextInput
+              onChangeText={setMovDesc}
+              placeholder="Descrizione"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              value={movDesc}
+            />
+            <View style={styles.rowGap}>
+              <TextInput
+                keyboardType="numeric"
+                onChangeText={setMovAmount}
+                placeholder="Importo"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, styles.inputFlex]}
+                value={movAmount}
+              />
+              <TextInput
+                onChangeText={setMovDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, styles.inputFlex]}
+                value={movDate}
+              />
+            </View>
+            <Pressable onPress={() => selectedAccountId && saveMov(selectedAccountId)} style={styles.btn}>
+              <Text style={styles.btnText}>Salva movimento</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -315,14 +373,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: spacing.md,
   },
-  card: {
+  cardHeaderOnly: {
     backgroundColor: colors.panel,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -338,6 +393,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   cardRight: {
     flexDirection: 'row',
@@ -349,16 +406,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textPrimary,
   },
-  chevron: {
-    fontSize: 10,
-    color: colors.textSecondary,
+  backBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.panel,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
   },
-  expanded: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
+  backText: {
+    fontFamily: typography.bodyStrong,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  detailRoot: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  detailCard: {
+    backgroundColor: colors.panel,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
     gap: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   rowGap: {
     flexDirection: 'row',
