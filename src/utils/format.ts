@@ -20,12 +20,8 @@ export function formatAccountType(type: string) {
       return 'Contanti';
     case 'card':
       return 'Carta';
-    case 'bank':
-      return 'Banca';
-    case 'wallet':
-      return 'Wallet';
     default:
-      return 'Altro';
+      return 'Contanti';
   }
 }
 

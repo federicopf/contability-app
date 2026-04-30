@@ -1,4 +1,4 @@
-export type AccountType = 'cash' | 'card' | 'bank' | 'wallet' | 'other';
+export type AccountType = 'cash' | 'card';
 
 export type TransactionType = 'income' | 'expense' | 'transfer';
 

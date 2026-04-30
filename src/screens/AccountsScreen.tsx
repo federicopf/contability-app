@@ -17,17 +17,11 @@ import { formatCurrency, formatDate } from '../utils/format';
 const TYPE_LABELS: Record<AccountType, string> = {
   cash: 'Contanti',
   card: 'Carta',
-  bank: 'Banca',
-  wallet: 'Wallet',
-  other: 'Altro',
 };
 
 const accountTypeOptions: Array<{ label: string; value: AccountType }> = [
   { label: 'Contanti', value: 'cash' },
   { label: 'Carta', value: 'card' },
-  { label: 'Banca', value: 'bank' },
-  { label: 'Wallet', value: 'wallet' },
-  { label: 'Altro', value: 'other' },
 ];
 
 export function AccountsScreen() {
