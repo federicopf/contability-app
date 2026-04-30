@@ -6,7 +6,7 @@ import { AccountsScreen } from '../screens/AccountsScreen';
 import { PersonalEventsScreen } from '../screens/PersonalEventsScreen';
 import { RatesScreen } from '../screens/RatesScreen';
 import { StatisticsScreen } from '../screens/StatisticsScreen';
-import { colors, radius, typography } from '../theme/tokens';
+import { colors, radius, spacing, typography } from '../theme/tokens';
 
 export type RootTabParamList = {
   Conti: undefined;
@@ -28,25 +28,32 @@ export function RootNavigator() {
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
           position: 'absolute',
-          left: 16,
-          right: 16,
-          bottom: Math.max(16, insets.bottom + 8),
-          height: 62 + Math.max(10, insets.bottom),
-          borderRadius: radius.lg,
+          left: spacing.md,
+          right: spacing.md,
+          bottom: Math.max(10, insets.bottom + 4),
+          height: 58,
+          borderRadius: radius.md,
           backgroundColor: 'rgba(255, 253, 248, 0.94)',
           borderTopWidth: 0,
-          paddingTop: 10,
-          paddingBottom: Math.max(10, insets.bottom),
-          paddingHorizontal: 8,
+          paddingTop: 4,
+          paddingBottom: 4,
+          paddingHorizontal: 4,
           elevation: 0,
         },
         tabBarHideOnKeyboard: true,
+        tabBarItemStyle: {
+          paddingVertical: 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 0,
+        },
         tabBarLabelStyle: {
           fontFamily: typography.bodyStrong,
-          fontSize: 12,
+          fontSize: 10,
+          marginBottom: 2,
         },
-        tabBarIcon: ({ color, size }) => (
-          <MaterialIcons color={color} name={getTabIcon(route.name)} size={size} />
+        tabBarIcon: ({ color }) => (
+          <MaterialIcons color={color} name={getTabIcon(route.name)} size={20} />
         ),
       })}
     >
